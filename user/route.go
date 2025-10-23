@@ -28,12 +28,11 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 
 	userGroup := r.Group("/api/users")
 
-	userGroup.POST("/", handler.CreateUser)
-	userGroup.GET("/", handler.GetUsers)
-	userGroup.GET("/:id", handler.GetUserByID)
-
 	userGroup.Use(middleware.AuthMiddleware())
 	{
+		userGroup.POST("/", handler.CreateUser)
+		userGroup.GET("/", handler.GetUsers)
+		userGroup.GET("/:id", handler.GetUserByID)
 		userGroup.PUT("/:id", handler.UpdateUser)
 		userGroup.DELETE("/:id", handler.DeleteUser)
 		userGroup.POST("/logout", handler.Logout)

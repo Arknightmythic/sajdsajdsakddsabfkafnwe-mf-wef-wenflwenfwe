@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 
+	"dokuprime-be/middleware"
 	"dokuprime-be/permission"
 	"dokuprime-be/team"
 )
@@ -16,6 +17,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	handler := NewRoleHandler(service)
 
 	roleGroup := r.Group("/api/roles")
+
+	roleGroup.Use(middleware.AuthMiddleware())
 	{
 		roleGroup.POST("", handler.Create)
 		roleGroup.GET("", handler.GetAll)

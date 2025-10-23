@@ -1,6 +1,8 @@
 package permission
 
 import (
+	"dokuprime-be/middleware"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 )
@@ -11,6 +13,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	handler := NewPermissionHandler(service)
 
 	permissionRoutes := r.Group("/api/permissions")
+
+	permissionRoutes.Use(middleware.AuthMiddleware())
 	{
 		permissionRoutes.POST("", handler.CreatePermission)
 		permissionRoutes.GET("", handler.GetPermissions)
@@ -18,4 +22,5 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		permissionRoutes.PUT("/:id", handler.UpdatePermission)
 		permissionRoutes.DELETE("/:id", handler.DeletePermission)
 	}
+
 }

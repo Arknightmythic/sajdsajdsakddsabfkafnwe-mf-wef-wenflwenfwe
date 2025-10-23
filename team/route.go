@@ -1,6 +1,8 @@
 package team
 
 import (
+	"dokuprime-be/middleware"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 )
@@ -11,6 +13,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	handler := NewTeamHandler(service)
 
 	teamRoutes := r.Group("/api/teams")
+
+	teamRoutes.Use(middleware.AuthMiddleware())
 	{
 		teamRoutes.POST("", handler.CreateTeam)
 		teamRoutes.GET("", handler.GetAll)
