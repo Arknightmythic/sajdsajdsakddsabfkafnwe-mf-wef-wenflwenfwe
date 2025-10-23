@@ -108,7 +108,6 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 		return nil, errors.New("invalid email or password")
 	}
 
-	// Verify password using deterministic hash
 	err = util.VerifyPassword(user.Password, password)
 	if err != nil {
 		return nil, errors.New("invalid email or password")
@@ -132,10 +131,16 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 	}
 
 	user.Password = ""
+
+	userValid, err := s.GetUserByID(int(user.ID))
+	if err != nil {
+		return nil, err
+	}
+
 	return &LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		User:         user,
+		User:         userValid,
 	}, nil
 }
 

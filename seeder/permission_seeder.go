@@ -6,7 +6,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func RunSeeder(db *sqlx.DB) {
+func permissionSeeder(db *sqlx.DB) {
 	var count int
 	err := db.Get(&count, "SELECT COUNT(*) FROM permissions")
 	if err != nil {
