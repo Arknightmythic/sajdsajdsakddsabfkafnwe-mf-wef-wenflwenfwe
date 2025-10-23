@@ -1,7 +1,6 @@
 package user
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 
@@ -18,15 +17,12 @@ func NewUserHandler(service *UserService) *UserHandler {
 	return &UserHandler{Service: service}
 }
 
-
 func (h *UserHandler) CreateUser(c *gin.Context) {
 	var user User
 	if err := c.ShouldBindJSON(&user); err != nil {
 		util.ErrorResponse(c, http.StatusBadRequest, "Invalid input")
 		return
 	}
-
-	log.Println(user)
 
 	createdUser, err := h.Service.CreateUser(&user)
 	if err != nil {
@@ -37,7 +33,6 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	util.CreatedResponse(c, "User created successfully", createdUser)
 }
 
-
 func (h *UserHandler) GetUsers(c *gin.Context) {
 	users, err := h.Service.GetUsers()
 	if err != nil {
@@ -47,7 +42,6 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 
 	util.SuccessResponse(c, "Users fetched successfully", users)
 }
-
 
 func (h *UserHandler) GetUserByID(c *gin.Context) {
 	idParam := c.Param("id")
@@ -65,7 +59,6 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 
 	util.SuccessResponse(c, "User fetched successfully", user)
 }
-
 
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	idParam := c.Param("id")
@@ -89,7 +82,6 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 
 	util.SuccessResponse(c, "User updated successfully", updatedUser)
 }
-
 
 func (h *UserHandler) DeleteUser(c *gin.Context) {
 	idParam := c.Param("id")

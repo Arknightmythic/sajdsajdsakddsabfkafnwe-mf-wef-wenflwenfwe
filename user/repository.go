@@ -14,37 +14,37 @@ func NewUserRepository(db *sqlx.DB) *UserRepository {
 
 func (r *UserRepository) CreateUser(user *User) (*User, error) {
 	query := `
-		INSERT INTO users (email, password, account_type, phone)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, email, account_type, phone;
+		INSERT INTO users (email, password, account_type, phone, role_id)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, email, account_type, phone, role_id;
 	`
 	var createdUser User
-	err := r.DB.Get(&createdUser, query, user.Email, user.Password, user.AccountType, user.Phone)
+	err := r.DB.Get(&createdUser, query, user.Email, user.Password, user.AccountType, user.Phone, user.RoleID)
 	return &createdUser, err
 }
 
 func (r *UserRepository) GetUsers() ([]User, error) {
 	var users []User
-	query := `SELECT id, email, account_type, phone FROM users ORDER BY id ASC;`
+	query := `SELECT id, email, account_type, phone, role_id FROM users ORDER BY id ASC;`
 	err := r.DB.Select(&users, query)
 	return users, err
 }
 
 func (r *UserRepository) GetUserByID(id int) (*User, error) {
 	var user User
-	query := `SELECT id, email, account_type, phone FROM users WHERE id=$1;`
+	query := `SELECT id, email, account_type, phone, role_id FROM users WHERE id=$1;`
 	err := r.DB.Get(&user, query, id)
 	return &user, err
 }
 
 func (r *UserRepository) UpdateUser(id int, user *User) (*User, error) {
 	query := `
-		UPDATE users SET email=$1, password=$2, account_type=$3, phone=$4
-		WHERE id=$5
-		RETURNING id, email, account_type, phone;
+		UPDATE users SET email=$1, password=$2, account_type=$3, phone=$4, role_id=$5
+		WHERE id=$6
+		RETURNING id, email, account_type, phone, role_id;
 	`
 	var updatedUser User
-	err := r.DB.Get(&updatedUser, query, user.Email, user.Password, user.AccountType, user.Phone, id)
+	err := r.DB.Get(&updatedUser, query, user.Email, user.Password, user.AccountType, user.Phone, user.RoleID, id)
 	return &updatedUser, err
 }
 

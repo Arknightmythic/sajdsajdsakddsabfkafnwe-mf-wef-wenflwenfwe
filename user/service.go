@@ -4,47 +4,87 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
 	"dokuprime-be/auth"
+	"dokuprime-be/role"
 	"dokuprime-be/util"
 
 	"github.com/redis/go-redis/v9"
 )
 
 type UserService struct {
-	Repo  *UserRepository
-	Redis *redis.Client
+	repo        *UserRepository
+	Redis       *redis.Client
+	serviceRole *role.RoleService
 }
 
-func NewUserService(repo *UserRepository, redisClient *redis.Client) *UserService {
+func NewUserService(repo *UserRepository, redisClient *redis.Client, serviceRole *role.RoleService) *UserService {
 	return &UserService{
-		Repo:  repo,
-		Redis: redisClient,
+		repo:        repo,
+		Redis:       redisClient,
+		serviceRole: serviceRole,
 	}
 }
 
 func (s *UserService) CreateUser(user *User) (*User, error) {
-	log.Println(user.Password, " User passsword")
 	hashedPassword, err := util.GenerateDeterministicHash(user.Password)
 	if err != nil {
 		return nil, errors.New("failed to hash password")
 	}
 	user.Password = hashedPassword
 
-	log.Printf("Creating user with email: %s", user.Email)
-
-	return s.Repo.CreateUser(user)
+	return s.repo.CreateUser(user)
 }
 
-func (s *UserService) GetUsers() ([]User, error) {
-	return s.Repo.GetUsers()
+func (s *UserService) GetUsers() ([]GetUserDTO, error) {
+	users, err := s.repo.GetUsers()
+	if err != nil {
+		return nil, err
+	}
+
+	var getUsersDto []GetUserDTO
+	for _, user := range users {
+		role, err := s.serviceRole.GetByID(user.RoleID)
+		if err != nil {
+			return nil, err
+		}
+
+		getUserDto := GetUserDTO{
+			ID:          user.ID,
+			Email:       user.Email,
+			AccountType: user.AccountType,
+			Role:        *role,
+			Phone:       user.Phone,
+		}
+
+		getUsersDto = append(getUsersDto, getUserDto)
+	}
+
+	return getUsersDto, nil
 }
 
-func (s *UserService) GetUserByID(id int) (*User, error) {
-	return s.Repo.GetUserByID(id)
+func (s *UserService) GetUserByID(id int) (*GetUserDTO, error) {
+	user, err := s.repo.GetUserByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	role, err := s.serviceRole.GetByID(user.RoleID)
+	if err != nil {
+		return nil, err
+	}
+
+	getUserDto := &GetUserDTO{
+		ID:          user.ID,
+		Email:       user.Email,
+		AccountType: user.AccountType,
+		Role:        *role,
+		Phone:       user.Phone,
+	}
+
+	return getUserDto, nil
 }
 
 func (s *UserService) UpdateUser(id int, user *User) (*User, error) {
@@ -55,30 +95,24 @@ func (s *UserService) UpdateUser(id int, user *User) (*User, error) {
 		}
 		user.Password = hashedPassword
 	}
-	return s.Repo.UpdateUser(id, user)
+	return s.repo.UpdateUser(id, user)
 }
 
 func (s *UserService) DeleteUser(id int) error {
-	return s.Repo.DeleteUser(id)
+	return s.repo.DeleteUser(id)
 }
 
 func (s *UserService) Login(email, password string) (*LoginResponse, error) {
-	log.Printf("Login attempt for email: %s", email)
-
-	user, err := s.Repo.GetUserByEmail(email)
+	user, err := s.repo.GetUserByEmail(email)
 	if err != nil {
-		log.Printf("User not found: %v", err)
 		return nil, errors.New("invalid email or password")
 	}
 
 	// Verify password using deterministic hash
 	err = util.VerifyPassword(user.Password, password)
 	if err != nil {
-		log.Printf("Password verification failed: %v", err)
 		return nil, errors.New("invalid email or password")
 	}
-
-	log.Println("Password verified successfully")
 
 	accessToken, err := auth.GenerateAccessToken(user.ID, user.Email, user.AccountType)
 	if err != nil {
@@ -129,7 +163,7 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 		return "", errors.New("refresh token not found or invalid")
 	}
 
-	user, err := s.Repo.GetUserByID(int(userID))
+	user, err := s.repo.GetUserByID(int(userID))
 	if err != nil {
 		return "", errors.New("user not found")
 	}

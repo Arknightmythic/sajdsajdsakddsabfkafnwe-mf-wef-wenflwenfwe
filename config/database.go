@@ -22,15 +22,13 @@ func InitDB() *sqlx.DB {
 
 	defaultDB, err := sqlx.Connect(dbDriver, defaultDSN)
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to default database: %v", err)
+		log.Fatalf("Failed to connect to default database: %v", err)
 	}
 
 	defaultDB.Close()
 
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		dbUser, dbPassword, dbHost, dbPort, dbName)
-
-	log.Printf("Connecting to %s on %s:%s", dbName, dbHost, dbPort)
 
 	db, err := sqlx.Connect(dbDriver, dsn)
 	if err != nil {

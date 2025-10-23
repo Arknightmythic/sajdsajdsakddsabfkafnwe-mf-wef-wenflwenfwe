@@ -3,6 +3,10 @@ package main
 import (
 	"dokuprime-be/config"
 	"dokuprime-be/migrate"
+	"dokuprime-be/permission"
+	"dokuprime-be/role"
+	"dokuprime-be/seeder"
+	"dokuprime-be/team"
 	"dokuprime-be/user"
 	"log"
 	"os"
@@ -13,18 +17,31 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️ Warning: .env file not found, using system env variables.")
+		log.Println("Warning: .env file not found, using system environment variables.")
 	}
 
-	r := gin.Default()
+	args := os.Args
 	db := config.InitDB()
 	defer db.Close()
+
+	if len(args) > 1 && args[1] == "--migrate" {
+		migrate.RunMigrations(db)
+		return
+	}
+
+	if len(args) > 1 && args[1] == "--seed" {
+		seeder.RunSeeder(db)
+		return
+	}
 
 	redisClient := config.InitRedis()
 	defer redisClient.Close()
 
-	migrate.RunMigrations(db)
+	r := gin.Default()
 	user.RegisterRoutes(r, db, redisClient)
+	role.RegisterRoutes(r, db)
+	team.RegisterRoutes(r, db)
+	permission.RegisterRoutes(r, db)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
