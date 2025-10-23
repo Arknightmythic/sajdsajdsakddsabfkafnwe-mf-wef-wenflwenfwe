@@ -1,0 +1,81 @@
+# =====================================
+# Go Build & Module Files
+# =====================================
+bin/
+build/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go modules
+vendor/
+go.work
+go.work.sum
+
+# =====================================
+# Logs & Temporary Files
+# =====================================
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# =====================================
+# OS Generated Files
+# =====================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+desktop.ini
+
+# =====================================
+# Environment & Config Files
+# =====================================
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+*.env.*
+
+# =====================================
+# IDE / Editor Folders
+# =====================================
+.vscode/
+.idea/
+*.iml
+
+# =====================================
+# Dependency Tools (if any)
+# =====================================
+# Go coverage & test outputs
+coverage.out
+*.cov
+*.coverprofile
+*.prof
+*.pprof
+
+# Air / Fresh / CompileDaemon (hot reload tools)
+.air.toml
+.tmp/
+tmp/
+
+# Docker
+*.pid
+*.seed
+docker-compose.override.yml
+docker-data/
+.docker/
+.dockerignore
+
+# =====================================
+# Misc
+# =====================================
+# If you have local file upl
