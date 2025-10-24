@@ -3,6 +3,7 @@ package seeder
 import (
 	"dokuprime-be/util"
 	"log"
+	"os"
 	"strconv"
 
 	"github.com/jmoiron/sqlx"
@@ -85,7 +86,7 @@ func superadminSeeder(db *sqlx.DB) {
 	log.Printf("Created superadmin role with ID: %d with %d permissions", roleID, len(permissionIDs))
 
 	// 4. Create Superadmin User
-	hashedPassword, err := util.GenerateDeterministicHash("superadmin")
+	hashedPassword, err := util.GenerateDeterministicHash(os.Getenv("SUPERADMIN_PASSWORD"))
 	if err != nil {
 		log.Fatalf("Failed to hash password: %v", err)
 	}

@@ -113,6 +113,26 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
+	c.SetCookie(
+		"access_token",
+		response.AccessToken,
+		3600,
+		"/",
+		"",
+		false,
+		true,
+	)
+
+	c.SetCookie(
+		"refresh_token",
+		response.RefreshToken,
+		604800,
+		"/",
+		"",
+		false,
+		true,
+	)
+
 	util.SuccessResponse(c, "Login successful", response)
 }
 
@@ -129,21 +149,35 @@ func (h *UserHandler) Logout(c *gin.Context) {
 		return
 	}
 
+	c.SetCookie("access_token", "", -1, "/", "", false, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
+
 	util.SuccessResponse(c, "Logout successful", nil)
 }
 
 func (h *UserHandler) RefreshToken(c *gin.Context) {
-	var req RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid input")
+
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil {
+		util.ErrorResponse(c, http.StatusBadRequest, "Refresh token not found")
 		return
 	}
 
-	accessToken, err := h.Service.RefreshAccessToken(req.RefreshToken)
+	accessToken, err := h.Service.RefreshAccessToken(refreshToken)
 	if err != nil {
 		util.ErrorResponse(c, http.StatusUnauthorized, err.Error())
 		return
 	}
+
+	c.SetCookie(
+		"access_token",
+		accessToken,
+		3600,
+		"/",
+		"",
+		false,
+		true,
+	)
 
 	util.SuccessResponse(c, "Token refreshed successfully", gin.H{
 		"access_token": accessToken,

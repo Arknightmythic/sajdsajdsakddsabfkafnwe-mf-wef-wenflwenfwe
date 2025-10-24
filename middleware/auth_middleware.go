@@ -6,26 +6,34 @@ import (
 
 	"dokuprime-be/auth"
 	"dokuprime-be/util"
+
 	"github.com/gin-gonic/gin"
 )
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			util.ErrorResponse(c, http.StatusUnauthorized, "Authorization header required")
-			c.Abort()
-			return
+		var token string
+
+		token, err := c.Cookie("access_token")
+
+		if err != nil {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				util.ErrorResponse(c, http.StatusUnauthorized, "Authorization header required")
+				c.Abort()
+				return
+			}
+
+			parts := strings.Split(authHeader, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				util.ErrorResponse(c, http.StatusUnauthorized, "Invalid authorization format")
+				c.Abort()
+				return
+			}
+			token = parts[1]
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			util.ErrorResponse(c, http.StatusUnauthorized, "Invalid authorization format")
-			c.Abort()
-			return
-		}
-
-		claims, err := auth.ValidateToken(parts[1])
+		claims, err := auth.ValidateToken(token)
 		if err != nil {
 			util.ErrorResponse(c, http.StatusUnauthorized, "Invalid or expired token")
 			c.Abort()

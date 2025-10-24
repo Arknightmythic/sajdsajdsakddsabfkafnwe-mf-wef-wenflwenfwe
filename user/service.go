@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"dokuprime-be/auth"
@@ -156,10 +155,7 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 		return "", errors.New("invalid refresh token")
 	}
 
-	userID, err := strconv.ParseInt(claims.Subject, 10, 64)
-	if err != nil {
-		return "", errors.New("invalid user ID in token")
-	}
+	userID := claims.UserID
 
 	ctx := context.Background()
 	key := fmt.Sprintf("refresh_token:%d", userID)
