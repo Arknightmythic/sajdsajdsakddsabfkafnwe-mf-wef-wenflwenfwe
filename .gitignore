@@ -43,7 +43,6 @@ desktop.ini
 .env.production
 .env.development
 .env.test
-*.env.*
 
 # =====================================
 # IDE / Editor Folders
