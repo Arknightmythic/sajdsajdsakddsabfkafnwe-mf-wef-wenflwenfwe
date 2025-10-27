@@ -11,7 +11,6 @@ import (
 )
 
 func superadminSeeder(db *sqlx.DB) {
-	// Check if superadmin user already exists
 	var userCount int
 	err := db.Get(&userCount, "SELECT COUNT(*) FROM users WHERE email = 'superadmin@superadmin.com'")
 	if err != nil {
@@ -29,7 +28,6 @@ func superadminSeeder(db *sqlx.DB) {
 	}
 	defer tx.Rollback()
 
-	// 1. Create Superadmin Team
 	teamPages := pq.StringArray{
 		"dashboard",
 		"knowledge-base",
@@ -53,7 +51,6 @@ func superadminSeeder(db *sqlx.DB) {
 	}
 	log.Printf("Created superadmin team with ID: %d", teamID)
 
-	// 2. Get all permission IDs from the permissions table
 	var permissionIDs []string
 	rows, err := tx.Query("SELECT id FROM permissions ORDER BY id")
 	if err != nil {
@@ -73,7 +70,6 @@ func superadminSeeder(db *sqlx.DB) {
 		log.Println("Warning: No permissions found. Make sure to run permission seeder first.")
 	}
 
-	// 3. Create Superadmin Role
 	var roleID int
 	err = tx.QueryRow(`
 		INSERT INTO roles (name, permissions, team_id) 
@@ -85,7 +81,6 @@ func superadminSeeder(db *sqlx.DB) {
 	}
 	log.Printf("Created superadmin role with ID: %d with %d permissions", roleID, len(permissionIDs))
 
-	// 4. Create Superadmin User
 	hashedPassword, err := util.GenerateDeterministicHash(os.Getenv("SUPERADMIN_PASSWORD"))
 	if err != nil {
 		log.Fatalf("Failed to hash password: %v", err)
@@ -102,7 +97,6 @@ func superadminSeeder(db *sqlx.DB) {
 	}
 	log.Printf("Created superadmin user with ID: %d", userID)
 
-	// Commit transaction
 	err = tx.Commit()
 	if err != nil {
 		log.Fatalf("Failed to commit transaction: %v", err)
