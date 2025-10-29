@@ -22,6 +22,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	{
 		roleGroup.POST("", handler.Create)
 		roleGroup.GET("", handler.GetAll)
+		roleGroup.GET("/by-team-id/:id", handler.GetRoleByTeamID)
 		roleGroup.GET("/:id", handler.GetByID)
 		roleGroup.PUT("/:id", handler.Update)
 		roleGroup.DELETE("/:id", handler.Delete)

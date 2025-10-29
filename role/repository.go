@@ -20,6 +20,12 @@ func (r *RoleRepository) Create(role Role) error {
 	return err
 }
 
+func (r *RoleRepository) GetRoleByTeamID(teamID int) ([]Role, error) {
+	var roles []Role
+	err := r.db.Select(&roles, "SELECT * FROM roles WHERE team_id=$1", teamID)
+	return roles, err
+}
+
 func (r *RoleRepository) GetAll(limit, offset int) ([]Role, error) {
 	var roles []Role
 	err := r.db.Select(&roles, "SELECT * FROM roles ORDER BY id LIMIT $1 OFFSET $2", limit, offset)

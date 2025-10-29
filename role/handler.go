@@ -32,16 +32,15 @@ func (h *RoleHandler) Create(c *gin.Context) {
 }
 
 func (h *RoleHandler) GetAll(c *gin.Context) {
-	
+
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	
 	if limit <= 0 {
 		limit = 10
 	}
 	if limit > 100 {
-		limit = 100 
+		limit = 100
 	}
 	if offset < 0 {
 		offset = 0
@@ -58,6 +57,26 @@ func (h *RoleHandler) GetAll(c *gin.Context) {
 		"total":  total,
 		"limit":  limit,
 		"offset": offset,
+	}
+
+	util.SuccessResponse(c, "Roles fetched successfully", response)
+}
+
+func (h *RoleHandler) GetRoleByTeamID(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		util.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	roles, err := h.service.GetRoleByTeamID(id)
+	if err != nil {
+		util.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	response := map[string]interface{}{
+		"data": roles,
 	}
 
 	util.SuccessResponse(c, "Roles fetched successfully", response)
