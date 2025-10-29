@@ -2,6 +2,7 @@ package main
 
 import (
 	"dokuprime-be/config"
+	"dokuprime-be/document"
 	"dokuprime-be/migrate"
 	"dokuprime-be/permission"
 	"dokuprime-be/role"
@@ -42,6 +43,7 @@ func main() {
 	role.RegisterRoutes(r, db)
 	team.RegisterRoutes(r, db)
 	permission.RegisterRoutes(r, db)
+	document.RegisterRoutes(r, db)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {

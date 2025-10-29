@@ -3,6 +3,7 @@ package role
 import (
 	"dokuprime-be/permission"
 	"dokuprime-be/team"
+	"log"
 	"strconv"
 )
 
@@ -24,10 +25,16 @@ func (s *RoleService) Create(role Role) error {
 	return s.repoRole.Create(role)
 }
 
-func (s *RoleService) GetAll() ([]GetRoleDTO, error) {
-	roles, err := s.repoRole.GetAll()
+func (s *RoleService) GetAll(limit, offset int) ([]GetRoleDTO, int, error) {
+	log.Println(limit, "-----------", offset)
+	roles, err := s.repoRole.GetAll(limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	total, err := s.repoRole.GetTotal()
+	if err != nil {
+		return nil, 0, err
 	}
 
 	var getRolesDto []GetRoleDTO
@@ -35,7 +42,7 @@ func (s *RoleService) GetAll() ([]GetRoleDTO, error) {
 	for _, role := range roles {
 		team, err := s.repoTeam.GetByID(role.TeamID)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		var permissionsDto []permission.Permission
@@ -43,12 +50,12 @@ func (s *RoleService) GetAll() ([]GetRoleDTO, error) {
 		for _, permission := range role.Permissions {
 			permissionID, err := strconv.Atoi(permission)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 
 			permissionDto, err := s.repoPermission.GetByID(permissionID)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 
 			permissionsDto = append(permissionsDto, *permissionDto)
@@ -64,7 +71,7 @@ func (s *RoleService) GetAll() ([]GetRoleDTO, error) {
 		getRolesDto = append(getRolesDto, getRoleDto)
 	}
 
-	return getRolesDto, nil
+	return getRolesDto, total, nil
 }
 
 func (s *RoleService) GetByID(id int) (*GetRoleDTO, error) {

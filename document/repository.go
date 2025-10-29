@@ -1,0 +1,223 @@
+package document
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/jmoiron/sqlx"
+)
+
+type DocumentRepository struct {
+	db *sqlx.DB
+}
+
+func NewDocumentRepository(db *sqlx.DB) *DocumentRepository {
+	return &DocumentRepository{db: db}
+}
+
+func (r *DocumentRepository) CreateDocument(document *Document) error {
+	query := `INSERT INTO documents (category) VALUES ($1) RETURNING id`
+	return r.db.QueryRow(query, document.Category).Scan(&document.ID)
+}
+
+func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error {
+	query := `
+		INSERT INTO document_details 
+		(document_id, document_name, filename, data_type, staff, team, status, is_latest, is_approve, created_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) 
+		RETURNING id, created_at
+	`
+	return r.db.QueryRow(
+		query,
+		detail.DocumentID,
+		detail.DocumentName,
+		detail.Filename,
+		detail.DataType,
+		detail.Staff,
+		detail.Team,
+		detail.Status,
+		detail.IsLatest,
+		detail.IsApprove,
+	).Scan(&detail.ID, &detail.CreatedAt)
+}
+
+func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentWithDetail, error) {
+	var documents []DocumentWithDetail
+
+	query := `
+		SELECT 
+			d.id AS id,
+			d.category AS category,
+			dd.document_name AS document_name,
+			dd.filename AS filename,
+			dd.data_type AS data_type,
+			dd.staff AS staff,
+			dd.team AS team,
+			dd.status AS status,
+			dd.is_latest AS is_latest,
+			dd.is_approve AS is_approve,
+			dd.created_at AS created_at
+		FROM documents d
+		INNER JOIN document_details dd ON d.id = dd.document_id
+		WHERE dd.is_latest = true
+	`
+
+	var conditions []string
+	var args []interface{}
+	argIndex := 1
+
+	if filter.Search != "" {
+		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		args = append(args, "%"+filter.Search+"%")
+		argIndex++
+	}
+
+	if filter.DataType != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		args = append(args, filter.DataType)
+		argIndex++
+	}
+
+	if filter.Category != "" {
+		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		args = append(args, filter.Category)
+		argIndex++
+	}
+
+	if filter.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		args = append(args, filter.Status)
+		argIndex++
+	}
+
+	if len(conditions) > 0 {
+		query += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	query += " ORDER BY dd.created_at DESC"
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, filter.Limit, filter.Offset)
+
+	err := r.db.Select(&documents, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return documents, nil
+}
+
+func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM documents d
+		INNER JOIN document_details dd ON d.id = dd.document_id
+		WHERE dd.is_latest = true
+	`
+
+	var conditions []string
+	var args []interface{}
+	argIndex := 1
+
+	if filter.Search != "" {
+		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		args = append(args, "%"+filter.Search+"%")
+		argIndex++
+	}
+
+	if filter.DataType != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		args = append(args, filter.DataType)
+		argIndex++
+	}
+
+	if filter.Category != "" {
+		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		args = append(args, filter.Category)
+		argIndex++
+	}
+
+	if filter.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		args = append(args, filter.Status)
+		argIndex++
+	}
+
+	if len(conditions) > 0 {
+		query += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	var total int
+	err := r.db.QueryRow(query, args...).Scan(&total)
+	return total, err
+}
+
+func (r *DocumentRepository) GetDocumentByID(id int) (*Document, error) {
+	var document Document
+	err := r.db.Get(&document, `SELECT id, category FROM documents WHERE id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	return &document, nil
+}
+
+func (r *DocumentRepository) GetDocumentDetailsByDocumentID(documentID int) ([]DocumentDetail, error) {
+	var details []DocumentDetail
+	query := `
+		SELECT 
+			id, document_id, document_name, filename, data_type, staff, team, 
+			status, is_latest, is_approve, created_at
+		FROM document_details
+		WHERE document_id = $1
+		ORDER BY created_at DESC
+	`
+	err := r.db.Select(&details, query, documentID)
+	if err != nil {
+		return nil, err
+	}
+	return details, nil
+}
+
+func (r *DocumentRepository) UpdateDocumentDetailLatest(documentID int) error {
+	query := `UPDATE document_details SET is_latest = false WHERE document_id = $1`
+	_, err := r.db.Exec(query, documentID)
+	return err
+}
+
+func (r *DocumentRepository) UpdateDocumentDetailLatestByID(id int, isLatest bool) error {
+	query := `UPDATE document_details SET is_latest = $1 WHERE id = $2`
+	_, err := r.db.Exec(query, isLatest, id)
+	return err
+}
+
+func (r *DocumentRepository) GetDocumentDetailByID(id int) (*DocumentDetail, error) {
+	var detail DocumentDetail
+	query := `
+		SELECT 
+			id, document_id, document_name, filename, data_type, staff, team, 
+			status, is_latest, is_approve, created_at
+		FROM document_details
+		WHERE id = $1
+	`
+	err := r.db.Get(&detail, query, id)
+	if err != nil {
+		return nil, err
+	}
+	return &detail, nil
+}
+
+func (r *DocumentRepository) UpdateDocumentDetailApprove(id int, isApprove bool) error {
+	query := `UPDATE document_details SET is_approve = $1 WHERE id = $2`
+	_, err := r.db.Exec(query, isApprove, id)
+	return err
+}
+
+func (r *DocumentRepository) UpdateAllDocumentDetailsApprove(documentID int, isApprove bool) error {
+	query := `UPDATE document_details SET is_approve = $1 WHERE document_id = $2`
+	_, err := r.db.Exec(query, isApprove, documentID)
+	return err
+}
+
+func (r *DocumentRepository) UpdateDocumentDetailStatus(id int, status string) error {
+	query := `UPDATE document_details SET status = $1 WHERE id = $2`
+	_, err := r.db.Exec(query, status, id)
+	return err
+}

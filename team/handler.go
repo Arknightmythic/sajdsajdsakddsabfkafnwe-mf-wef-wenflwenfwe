@@ -40,13 +40,34 @@ func (h *TeamHandler) CreateTeam(ctx *gin.Context) {
 }
 
 func (h *TeamHandler) GetAll(ctx *gin.Context) {
-	teams, err := h.service.GetAll()
+
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
+	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
+
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	teams, total, err := h.service.GetAll(limit, offset)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	util.SuccessResponse(ctx, "Teams retrieved successfully", teams)
+	response := map[string]interface{}{
+		"teams":  teams,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	}
+
+	util.SuccessResponse(ctx, "Teams retrieved successfully", response)
 }
 
 func (h *TeamHandler) GetTeamByID(ctx *gin.Context) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"dokuprime-be/auth"
@@ -37,31 +38,46 @@ func (s *UserService) CreateUser(user *User) (*User, error) {
 	return s.repo.CreateUser(user)
 }
 
-func (s *UserService) GetUsers() ([]GetUserDTO, error) {
-	users, err := s.repo.GetUsers()
+func (s *UserService) GetUsers(limit, offset int) (*PaginatedUsersResponse, error) {
+	users, err := s.repo.GetUsers(limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	total, err := s.repo.GetTotalUsers()
 	if err != nil {
 		return nil, err
 	}
 
 	var getUsersDto []GetUserDTO
 	for _, user := range users {
-		role, err := s.serviceRole.GetByID(user.RoleID)
-		if err != nil {
-			return nil, err
-		}
-
 		getUserDto := GetUserDTO{
 			ID:          user.ID,
+			Name:        user.Name,
 			Email:       user.Email,
 			AccountType: user.AccountType,
-			Role:        *role,
 			Phone:       user.Phone,
+		}
+
+		if user.RoleID != nil {
+			role, err := s.serviceRole.GetByID(*user.RoleID)
+			if err == nil {
+				getUserDto.Role = role
+			}
 		}
 
 		getUsersDto = append(getUsersDto, getUserDto)
 	}
 
-	return getUsersDto, nil
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+
+	return &PaginatedUsersResponse{
+		Data:       getUsersDto,
+		Total:      total,
+		Limit:      limit,
+		Offset:     offset,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func (s *UserService) GetUserByID(id int) (*GetUserDTO, error) {
@@ -70,17 +86,19 @@ func (s *UserService) GetUserByID(id int) (*GetUserDTO, error) {
 		return nil, err
 	}
 
-	role, err := s.serviceRole.GetByID(user.RoleID)
-	if err != nil {
-		return nil, err
-	}
-
 	getUserDto := &GetUserDTO{
 		ID:          user.ID,
+		Name:        user.Name,
 		Email:       user.Email,
 		AccountType: user.AccountType,
-		Role:        *role,
 		Phone:       user.Phone,
+	}
+
+	if user.RoleID != nil {
+		role, err := s.serviceRole.GetByID(*user.RoleID)
+		if err == nil {
+			getUserDto.Role = role
+		}
 	}
 
 	return getUserDto, nil
@@ -112,7 +130,12 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 		return nil, errors.New("invalid email or password")
 	}
 
-	accessToken, err := auth.GenerateAccessToken(user.ID, user.Email, user.AccountType)
+	accountType := ""
+	if user.AccountType != nil {
+		accountType = *user.AccountType
+	}
+
+	accessToken, err := auth.GenerateAccessToken(user.ID, user.Name, user.Email, accountType)
 	if err != nil {
 		return nil, errors.New("failed to generate access token")
 	}
@@ -169,5 +192,10 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 		return "", errors.New("user not found")
 	}
 
-	return auth.GenerateAccessToken(user.ID, user.Email, user.AccountType)
+	accountType := ""
+	if user.AccountType != nil {
+		accountType = *user.AccountType
+	}
+
+	return auth.GenerateAccessToken(user.ID, user.Name, user.Email, accountType)
 }

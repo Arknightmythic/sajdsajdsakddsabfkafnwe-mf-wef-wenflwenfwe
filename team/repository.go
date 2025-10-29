@@ -17,13 +17,19 @@ func (r *TeamRepository) Create(team *Team) error {
 	return err
 }
 
-func (r *TeamRepository) GetAll() ([]Team, error) {
+func (r *TeamRepository) GetAll(limit, offset int) ([]Team, error) {
 	var teams []Team
-	err := r.db.Select(&teams, `SELECT id, name, pages FROM teams`)
+	err := r.db.Select(&teams, `SELECT id, name, pages FROM teams ORDER BY id LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 	return teams, nil
+}
+
+func (r *TeamRepository) GetTotal() (int, error) {
+	var total int
+	err := r.db.Get(&total, `SELECT COUNT(*) FROM teams`)
+	return total, err
 }
 
 func (r *TeamRepository) GetByID(id int) (*Team, error) {

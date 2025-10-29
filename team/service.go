@@ -12,8 +12,18 @@ func (s *TeamService) Create(team *Team) error {
 	return s.repo.Create(team)
 }
 
-func (s *TeamService) GetAll() ([]Team, error) {
-	return s.repo.GetAll()
+func (s *TeamService) GetAll(limit, offset int) ([]Team, int, error) {
+	teams, err := s.repo.GetAll(limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.repo.GetTotal()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return teams, total, nil
 }
 
 func (s *TeamService) GetByID(id int) (*Team, error) {

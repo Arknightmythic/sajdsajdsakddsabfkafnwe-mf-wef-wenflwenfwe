@@ -11,12 +11,13 @@ import (
 
 type JWTClaims struct {
 	UserID      int64  `json:"user_id"`
+	Name        string `json:"name"`
 	Email       string `json:"email"`
 	AccountType string `json:"account_type"`
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(userID int64, email, accountType string) (string, error) {
+func GenerateAccessToken(userID int64, name, email, accountType string) (string, error) {
 	expiryStr := os.Getenv("JWT_ACCESS_EXPIRY")
 	if expiryStr == "" {
 		expiryStr = "15m"
@@ -26,6 +27,7 @@ func GenerateAccessToken(userID int64, email, accountType string) (string, error
 
 	claims := JWTClaims{
 		UserID:      userID,
+		Name:        name,
 		Email:       email,
 		AccountType: accountType,
 		RegisteredClaims: jwt.RegisteredClaims{

@@ -81,6 +81,8 @@ func superadminSeeder(db *sqlx.DB) {
 	}
 	log.Printf("Created superadmin role with ID: %d with %d permissions", roleID, len(permissionIDs))
 
+	log.Println(os.Getenv("SUPERADMIN_PASSWORD"))
+
 	hashedPassword, err := util.GenerateDeterministicHash(os.Getenv("SUPERADMIN_PASSWORD"))
 	if err != nil {
 		log.Fatalf("Failed to hash password: %v", err)
@@ -88,10 +90,10 @@ func superadminSeeder(db *sqlx.DB) {
 
 	var userID int
 	err = tx.QueryRow(`
-		INSERT INTO users (email, password, account_type, phone, role_id) 
-		VALUES ($1, $2, $3, $4, $5) 
+		INSERT INTO users (email, name, password, account_type, phone, role_id) 
+		VALUES ($1, $2, $3, $4, $5, $6) 
 		RETURNING id
-	`, "superadmin@superadmin.com", hashedPassword, "superadmin", "", roleID).Scan(&userID)
+	`, "superadmin@superadmin.com", "superadmin", hashedPassword, "superadmin", "", roleID).Scan(&userID)
 	if err != nil {
 		log.Fatalf("Failed to create superadmin user: %v", err)
 	}

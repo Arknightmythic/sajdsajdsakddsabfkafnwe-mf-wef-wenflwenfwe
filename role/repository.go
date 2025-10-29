@@ -20,10 +20,16 @@ func (r *RoleRepository) Create(role Role) error {
 	return err
 }
 
-func (r *RoleRepository) GetAll() ([]Role, error) {
+func (r *RoleRepository) GetAll(limit, offset int) ([]Role, error) {
 	var roles []Role
-	err := r.db.Select(&roles, "SELECT * FROM roles")
+	err := r.db.Select(&roles, "SELECT * FROM roles ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
 	return roles, err
+}
+
+func (r *RoleRepository) GetTotal() (int, error) {
+	var total int
+	err := r.db.Get(&total, "SELECT COUNT(*) FROM roles")
+	return total, err
 }
 
 func (r *RoleRepository) GetByID(id int) (*Role, error) {

@@ -34,13 +34,30 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 }
 
 func (h *UserHandler) GetUsers(c *gin.Context) {
-	users, err := h.Service.GetUsers()
+	limitStr := c.DefaultQuery("limit", "10")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = 10
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	if limit > 100 {
+		limit = 100
+	}
+
+	result, err := h.Service.GetUsers(limit, offset)
 	if err != nil {
 		util.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	util.SuccessResponse(c, "Users fetched successfully", users)
+	util.SuccessResponse(c, "Users fetched successfully", result)
 }
 
 func (h *UserHandler) GetUserByID(c *gin.Context) {
@@ -156,7 +173,6 @@ func (h *UserHandler) Logout(c *gin.Context) {
 }
 
 func (h *UserHandler) RefreshToken(c *gin.Context) {
-
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
 		util.ErrorResponse(c, http.StatusBadRequest, "Refresh token not found")
