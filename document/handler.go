@@ -1,6 +1,7 @@
 package document
 
 import (
+	"context"
 	"dokuprime-be/util"
 	"fmt"
 	"io"
@@ -11,14 +12,104 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 type DocumentHandler struct {
 	service *DocumentService
+	redis   *redis.Client 
 }
 
-func NewDocumentHandler(service *DocumentService) *DocumentHandler {
-	return &DocumentHandler{service: service}
+func NewDocumentHandler(service *DocumentService, redisClient *redis.Client) *DocumentHandler {
+	return &DocumentHandler{
+		service: service,
+		redis:   redisClient,
+	}
+}
+
+func (h *DocumentHandler) GenerateViewURL(ctx *gin.Context) {
+	var req struct {
+		Filename string `json:"filename" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Filename is required")
+		return
+	}
+
+	token, err := h.service.GenerateViewToken(req.Filename)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	baseURL := "http://" + ctx.Request.Host
+	viewURL := fmt.Sprintf("%s/api/documents/view-file?token=%s", baseURL, token)
+
+	util.SuccessResponse(ctx, "View URL generated successfully", gin.H{
+		"url": viewURL,
+	})
+}
+
+func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
+	token := ctx.Query("token")
+	if token == "" {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Token is required")
+		return
+	}
+
+	key := "view_token:" + token
+	ctxRedis := context.Background()
+
+	filename, err := h.redis.Get(ctxRedis, key).Result()
+	if err == redis.Nil {
+		util.ErrorResponse(ctx, http.StatusUnauthorized, "Invalid or expired token")
+		return
+	}
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to validate token with GET: %v", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, errorMsg)
+		return
+	}
+
+	
+	h.redis.Del(ctxRedis, key)
+
+
+
+	filePath := filepath.Join("./uploads/documents", filename)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		util.ErrorResponse(ctx, http.StatusNotFound, "File not found")
+		return
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to open file")
+		return
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to get file info")
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	contentType := "application/octet-stream" 
+	if ext == ".pdf" {
+		contentType = "application/pdf"
+	} else if ext == ".txt" {
+		contentType = "text/plain"
+	}
+
+	ctx.Header("Content-Description", "File View")
+	ctx.Header("Content-Type", contentType) 
+	ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	ctx.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
+
+	io.Copy(ctx.Writer, file)
 }
 
 func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {

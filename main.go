@@ -53,7 +53,7 @@ func main() {
 	role.RegisterRoutes(r, db)
 	team.RegisterRoutes(r, db)
 	permission.RegisterRoutes(r, db)
-	document.RegisterRoutes(r, db)
+	document.RegisterRoutes(r, db, redisClient)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
