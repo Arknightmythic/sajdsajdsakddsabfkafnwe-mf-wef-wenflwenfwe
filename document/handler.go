@@ -17,7 +17,7 @@ import (
 
 type DocumentHandler struct {
 	service *DocumentService
-	redis   *redis.Client 
+	redis   *redis.Client
 }
 
 func NewDocumentHandler(service *DocumentService, redisClient *redis.Client) *DocumentHandler {
@@ -71,10 +71,7 @@ func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 		return
 	}
 
-	
 	h.redis.Del(ctxRedis, key)
-
-
 
 	filePath := filepath.Join("./uploads/documents", filename)
 
@@ -97,7 +94,7 @@ func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 	}
 
 	ext := strings.ToLower(filepath.Ext(filename))
-	contentType := "application/octet-stream" 
+	contentType := "application/octet-stream"
 	if ext == ".pdf" {
 		contentType = "application/pdf"
 	} else if ext == ".txt" {
@@ -105,7 +102,7 @@ func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 	}
 
 	ctx.Header("Content-Description", "File View")
-	ctx.Header("Content-Type", contentType) 
+	ctx.Header("Content-Type", contentType)
 	ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
 	ctx.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
 
@@ -166,13 +163,14 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 	}
 
 	isLatest := true
+	pendingStatus := "Pending"
 	detail := &DocumentDetail{
 		DocumentName: originalFilename,
 		Filename:     uniqueFilename,
 		DataType:     dataType,
 		Staff:        email.(string),
 		Team:         accountType.(string),
-		Status:       nil,
+		Status:       &pendingStatus,
 		IsLatest:     &isLatest,
 		IsApprove:    nil,
 	}
@@ -305,13 +303,14 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 		return
 	}
 
+	pendingStatus := "Pending"
 	detail := &DocumentDetail{
 		DocumentName: originalFilename,
 		Filename:     uniqueFilename,
 		DataType:     dataType,
 		Staff:        email.(string),
 		Team:         accountType.(string),
-		Status:       nil,
+		Status:       &pendingStatus,
 		IsApprove:    nil,
 	}
 
@@ -388,4 +387,51 @@ func (h *DocumentHandler) DownloadDocument(ctx *gin.Context) {
 	ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
 
 	io.Copy(ctx.Writer, file)
+}
+
+func (h *DocumentHandler) GetAllDocumentDetails(ctx *gin.Context) {
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
+	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
+
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	filter := DocumentDetailFilter{
+		Search:       ctx.Query("search"),
+		DataType:     ctx.Query("data_type"),
+		Category:     ctx.Query("category"),
+		Status:       ctx.Query("status"),
+		DocumentName: ctx.Query("document_name"),
+		Limit:        limit,
+		Offset:       offset,
+	}
+
+	details, total, err := h.service.GetAllDocumentDetails(filter)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	response := map[string]interface{}{
+		"document_details": details,
+		"total":            total,
+		"limit":            limit,
+		"offset":           offset,
+		"filters": map[string]interface{}{
+			"search":        filter.Search,
+			"data_type":     filter.DataType,
+			"category":      filter.Category,
+			"status":        filter.Status,
+			"document_name": filter.DocumentName,
+		},
+	}
+
+	util.SuccessResponse(ctx, "Document details retrieved successfully", response)
 }

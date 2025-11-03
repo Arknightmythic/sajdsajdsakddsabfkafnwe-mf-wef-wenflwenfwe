@@ -17,18 +17,37 @@ func (r *TeamRepository) Create(team *Team) error {
 	return err
 }
 
-func (r *TeamRepository) GetAll(limit, offset int) ([]Team, error) {
+func (r *TeamRepository) GetAll(limit, offset int, search string) ([]Team, error) {
 	var teams []Team
-	err := r.db.Select(&teams, `SELECT id, name, pages FROM teams ORDER BY id LIMIT $1 OFFSET $2`, limit, offset)
-	if err != nil {
-		return nil, err
+	query := `SELECT id, name, pages FROM teams`
+
+	if search != "" {
+		query += ` WHERE name ILIKE $3`
+		err := r.db.Select(&teams, query+` ORDER BY id LIMIT $1 OFFSET $2`, limit, offset, "%"+search+"%")
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err := r.db.Select(&teams, query+` ORDER BY id LIMIT $1 OFFSET $2`, limit, offset)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	return teams, nil
 }
 
-func (r *TeamRepository) GetTotal() (int, error) {
+func (r *TeamRepository) GetTotal(search string) (int, error) {
 	var total int
-	err := r.db.Get(&total, `SELECT COUNT(*) FROM teams`)
+	query := `SELECT COUNT(*) FROM teams`
+
+	if search != "" {
+		query += ` WHERE name ILIKE $1`
+		err := r.db.Get(&total, query, "%"+search+"%")
+		return total, err
+	}
+
+	err := r.db.Get(&total, query)
 	return total, err
 }
 

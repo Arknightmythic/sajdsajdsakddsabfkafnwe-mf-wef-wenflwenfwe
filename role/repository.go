@@ -1,6 +1,8 @@
 package role
 
 import (
+	"fmt"
+
 	"github.com/jmoiron/sqlx"
 )
 
@@ -26,15 +28,68 @@ func (r *RoleRepository) GetRoleByTeamID(teamID int) ([]Role, error) {
 	return roles, err
 }
 
-func (r *RoleRepository) GetAll(limit, offset int) ([]Role, error) {
+func (r *RoleRepository) GetAll(limit, offset int, search string, teamID *int) ([]Role, error) {
 	var roles []Role
-	err := r.db.Select(&roles, "SELECT * FROM roles ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
+	var args []interface{}
+	argCount := 1
+
+	query := `
+		SELECT DISTINCT r.* 
+		FROM roles r
+		LEFT JOIN permissions p ON p.id::text = ANY(r.permissions)
+		WHERE 1=1
+	`
+
+	if search != "" {
+		query += fmt.Sprintf(` AND (
+			r.name ILIKE $%d OR 
+			p.name ILIKE $%d
+		)`, argCount, argCount)
+		args = append(args, "%"+search+"%")
+		argCount++
+	}
+
+	if teamID != nil {
+		query += fmt.Sprintf(` AND r.team_id = $%d`, argCount)
+		args = append(args, *teamID)
+		argCount++
+	}
+
+	query += fmt.Sprintf(` ORDER BY r.id LIMIT $%d OFFSET $%d`, argCount, argCount+1)
+	args = append(args, limit, offset)
+
+	err := r.db.Select(&roles, query, args...)
 	return roles, err
 }
 
-func (r *RoleRepository) GetTotal() (int, error) {
+func (r *RoleRepository) GetTotal(search string, teamID *int) (int, error) {
 	var total int
-	err := r.db.Get(&total, "SELECT COUNT(*) FROM roles")
+	var args []interface{}
+	argCount := 1
+
+	query := `
+		SELECT COUNT(DISTINCT r.id) 
+		FROM roles r
+		LEFT JOIN permissions p ON p.id::text = ANY(r.permissions)
+		WHERE 1=1
+	`
+
+	if search != "" {
+		query += fmt.Sprintf(` AND (
+			r.name ILIKE $%d OR 
+			p.name ILIKE $%d
+		)`, argCount, argCount)
+		args = append(args, "%"+search+"%")
+		argCount++
+	}
+
+	if teamID != nil {
+		query += fmt.Sprintf(` AND r.team_id = $%d`, argCount)
+		args = append(args, *teamID)
+		argCount++
+	}
+
+	err := r.db.Get(&total, query, args...)
 	return total, err
 }
 

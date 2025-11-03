@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/jmoiron/sqlx"
@@ -25,17 +26,76 @@ func (r *UserRepository) CreateUser(user *User) (*User, error) {
 	return &createdUser, err
 }
 
-func (r *UserRepository) GetUsers(limit, offset int) ([]User, error) {
+func (r *UserRepository) GetUsers(query *GetUsersQuery) ([]User, error) {
 	var users []User
-	query := `SELECT id, name, email, account_type, phone, role_id FROM users ORDER BY id ASC LIMIT $1 OFFSET $2;`
-	err := r.DB.Select(&users, query, limit, offset)
+	baseQuery := `SELECT id, name, email, account_type, phone, role_id FROM users WHERE 1=1`
+	var args []interface{}
+	argIndex := 1
+
+	if query.AccountType != nil && *query.AccountType != "" {
+		baseQuery += ` AND account_type = $` + fmt.Sprintf("%d", argIndex)
+		args = append(args, *query.AccountType)
+		argIndex++
+	}
+
+	if query.RoleID != nil {
+		baseQuery += ` AND role_id = $` + fmt.Sprintf("%d", argIndex)
+		args = append(args, *query.RoleID)
+		argIndex++
+	}
+
+	if query.TeamID != nil {
+		baseQuery += ` AND role_id IN (SELECT id FROM roles WHERE team_id = $` + fmt.Sprintf("%d", argIndex) + `)`
+		args = append(args, *query.TeamID)
+		argIndex++
+	}
+
+	if query.Search != nil && *query.Search != "" {
+		searchPattern := "%" + *query.Search + "%"
+		baseQuery += ` AND (name ILIKE $` + fmt.Sprintf("%d", argIndex) + ` OR email ILIKE $` + fmt.Sprintf("%d", argIndex) + `)`
+		args = append(args, searchPattern)
+		argIndex++
+	}
+
+	baseQuery += ` ORDER BY id ASC LIMIT $` + fmt.Sprintf("%d", argIndex) + ` OFFSET $` + fmt.Sprintf("%d", argIndex+1)
+	args = append(args, query.Limit, query.Offset)
+
+	err := r.DB.Select(&users, baseQuery, args...)
 	return users, err
 }
 
-func (r *UserRepository) GetTotalUsers() (int, error) {
+func (r *UserRepository) GetTotalUsers(query *GetUsersQuery) (int, error) {
 	var count int
-	query := `SELECT COUNT(*) FROM users;`
-	err := r.DB.Get(&count, query)
+	baseQuery := `SELECT COUNT(*) FROM users WHERE 1=1`
+	var args []interface{}
+	argIndex := 1
+
+	if query.AccountType != nil && *query.AccountType != "" {
+		baseQuery += ` AND account_type = $` + fmt.Sprintf("%d", argIndex)
+		args = append(args, *query.AccountType)
+		argIndex++
+	}
+
+	if query.RoleID != nil {
+		baseQuery += ` AND role_id = $` + fmt.Sprintf("%d", argIndex)
+		args = append(args, *query.RoleID)
+		argIndex++
+	}
+
+	if query.TeamID != nil {
+		baseQuery += ` AND role_id IN (SELECT id FROM roles WHERE team_id = $` + fmt.Sprintf("%d", argIndex) + `)`
+		args = append(args, *query.TeamID)
+		argIndex++
+	}
+
+	if query.Search != nil && *query.Search != "" {
+		searchPattern := "%" + *query.Search + "%"
+		baseQuery += ` AND (name ILIKE $` + fmt.Sprintf("%d", argIndex) + ` OR email ILIKE $` + fmt.Sprintf("%d", argIndex) + `)`
+		args = append(args, searchPattern)
+		argIndex++
+	}
+
+	err := r.DB.Get(&count, baseQuery, args...)
 	return count, err
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"dokuprime-be/auth"
@@ -38,44 +37,51 @@ func (s *UserService) CreateUser(user *User) (*User, error) {
 	return s.repo.CreateUser(user)
 }
 
-func (s *UserService) GetUsers(limit, offset int) (*PaginatedUsersResponse, error) {
-	users, err := s.repo.GetUsers(limit, offset)
+func (s *UserService) GetUsers(query *GetUsersQuery) (*PaginatedUsersResponse, error) {
+	if query.Limit <= 0 {
+		query.Limit = 10
+	}
+	if query.Offset < 0 {
+		query.Offset = 0
+	}
+
+	users, err := s.repo.GetUsers(query)
 	if err != nil {
 		return nil, err
 	}
 
-	total, err := s.repo.GetTotalUsers()
+	total, err := s.repo.GetTotalUsers(query)
 	if err != nil {
 		return nil, err
 	}
 
-	var getUsersDto []GetUserDTO
-	for _, user := range users {
-		getUserDto := GetUserDTO{
+	totalPages := (total + query.Limit - 1) / query.Limit
+
+	getUserDTOs := make([]GetUserDTO, len(users))
+	for i, user := range users {
+		var roleDTO *role.GetRoleDTO
+		if user.RoleID != nil {
+			roleData, err := s.serviceRole.GetByID(*user.RoleID)
+			if err == nil {
+				roleDTO = roleData
+			}
+		}
+
+		getUserDTOs[i] = GetUserDTO{
 			ID:          user.ID,
 			Name:        user.Name,
 			Email:       user.Email,
 			AccountType: user.AccountType,
+			Role:        roleDTO,
 			Phone:       user.Phone,
 		}
-
-		if user.RoleID != nil {
-			role, err := s.serviceRole.GetByID(*user.RoleID)
-			if err == nil {
-				getUserDto.Role = role
-			}
-		}
-
-		getUsersDto = append(getUsersDto, getUserDto)
 	}
 
-	totalPages := int(math.Ceil(float64(total) / float64(limit)))
-
 	return &PaginatedUsersResponse{
-		Data:       getUsersDto,
+		Data:       getUserDTOs,
 		Total:      total,
-		Limit:      limit,
-		Offset:     offset,
+		Limit:      query.Limit,
+		Offset:     query.Offset,
 		TotalPages: totalPages,
 	}, nil
 }

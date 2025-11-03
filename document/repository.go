@@ -221,3 +221,115 @@ func (r *DocumentRepository) UpdateDocumentDetailStatus(id int, status string) e
 	_, err := r.db.Exec(query, status, id)
 	return err
 }
+
+func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) ([]DocumentDetail, error) {
+	var details []DocumentDetail
+
+	query := `
+        SELECT 
+            dd.id, dd.document_id, dd.document_name, dd.filename, dd.data_type, 
+            dd.staff, dd.team, dd.status, dd.is_latest, dd.is_approve, dd.created_at
+        FROM document_details dd
+        INNER JOIN documents d ON dd.document_id = d.id
+        WHERE 1=1
+    `
+
+	var conditions []string
+	var args []interface{}
+	argIndex := 1
+
+	if filter.Search != "" {
+		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		args = append(args, "%"+filter.Search+"%")
+		argIndex++
+	}
+
+	if filter.DataType != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		args = append(args, filter.DataType)
+		argIndex++
+	}
+
+	if filter.Category != "" {
+		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		args = append(args, filter.Category)
+		argIndex++
+	}
+
+	if filter.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		args = append(args, filter.Status)
+		argIndex++
+	}
+
+	if filter.DocumentName != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.document_name ILIKE $%d", argIndex))
+		args = append(args, "%"+filter.DocumentName+"%")
+		argIndex++
+	}
+
+	if len(conditions) > 0 {
+		query += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	query += " ORDER BY dd.created_at DESC"
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, filter.Limit, filter.Offset)
+
+	err := r.db.Select(&details, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return details, nil
+}
+
+func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter) (int, error) {
+	query := `
+        SELECT COUNT(*)
+        FROM document_details dd
+        INNER JOIN documents d ON dd.document_id = d.id
+        WHERE 1=1
+    `
+
+	var conditions []string
+	var args []interface{}
+	argIndex := 1
+
+	if filter.Search != "" {
+		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		args = append(args, "%"+filter.Search+"%")
+		argIndex++
+	}
+
+	if filter.DataType != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		args = append(args, filter.DataType)
+		argIndex++
+	}
+
+	if filter.Category != "" {
+		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		args = append(args, filter.Category)
+		argIndex++
+	}
+
+	if filter.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		args = append(args, filter.Status)
+		argIndex++
+	}
+
+	if filter.DocumentName != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.document_name ILIKE $%d", argIndex))
+		args = append(args, "%"+filter.DocumentName+"%")
+		argIndex++
+	}
+
+	if len(conditions) > 0 {
+		query += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	var total int
+	err := r.db.QueryRow(query, args...).Scan(&total)
+	return total, err
+}

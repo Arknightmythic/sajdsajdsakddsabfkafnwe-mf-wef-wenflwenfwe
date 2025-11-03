@@ -43,3 +43,13 @@ type DocumentFilter struct {
 	Limit    int
 	Offset   int
 }
+
+type DocumentDetailFilter struct {
+    Search       string
+    DataType     string
+    Category     string
+    Status       string
+    DocumentName string
+    Limit        int
+    Offset       int
+}
