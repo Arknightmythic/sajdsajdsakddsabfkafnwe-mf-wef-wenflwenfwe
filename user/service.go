@@ -38,7 +38,6 @@ func (s *UserService) CreateUser(user *User) (*User, error) {
 }
 
 func (s *UserService) GetUsers(query *GetUsersQuery) (*PaginatedUsersResponse, error) {
-	// Set defaults
 	if query.Limit <= 0 {
 		query.Limit = 10
 	}

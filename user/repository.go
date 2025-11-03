@@ -32,7 +32,6 @@ func (r *UserRepository) GetUsers(query *GetUsersQuery) ([]User, error) {
 	var args []interface{}
 	argIndex := 1
 
-	// Build dynamic WHERE clause
 	if query.AccountType != nil && *query.AccountType != "" {
 		baseQuery += ` AND account_type = $` + fmt.Sprintf("%d", argIndex)
 		args = append(args, *query.AccountType)
@@ -71,7 +70,6 @@ func (r *UserRepository) GetTotalUsers(query *GetUsersQuery) (int, error) {
 	var args []interface{}
 	argIndex := 1
 
-	// Build dynamic WHERE clause (same as GetUsers)
 	if query.AccountType != nil && *query.AccountType != "" {
 		baseQuery += ` AND account_type = $` + fmt.Sprintf("%d", argIndex)
 		args = append(args, *query.AccountType)
