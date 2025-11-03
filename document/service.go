@@ -4,16 +4,40 @@ import (
 	"fmt"
 	"path/filepath"
 	"time"
+	"context"
+	"dokuprime-be/util"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type DocumentService struct {
 	repo *DocumentRepository
+	redis *redis.Client
 }
 
-func NewDocumentService(repo *DocumentRepository) *DocumentService {
-	return &DocumentService{repo: repo}
+func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client) *DocumentService {
+	return &DocumentService{
+		repo:  repo,
+		redis: redisClient, // <-- Inisialisasi Redis
+	}
+}
+
+// Fungsi BARU untuk membuat token sekali pakai
+func (s *DocumentService) GenerateViewToken(filename string) (string, error) {
+	// Buat token acak yang unik
+	token := util.RandString(32) //
+	key := "view_token:" + token
+	
+	// Simpan token di Redis dengan nilai nama file
+	// dan atur masa berlakunya (misal: 5 menit)
+	ctx := context.Background()
+	err := s.redis.Set(ctx, key, filename, 5*time.Minute).Err()
+	if err != nil {
+		return "", fmt.Errorf("failed to store view token: %w", err)
+	}
+
+	return token, nil
 }
 
 func (s *DocumentService) CreateDocument(document *Document, detail *DocumentDetail) error {

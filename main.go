@@ -10,9 +10,8 @@ import (
 	"dokuprime-be/team"
 	"dokuprime-be/user"
 	"log"
-	"os"
 	"time"
-
+	"os"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -54,7 +53,7 @@ func main() {
 	role.RegisterRoutes(r, db)
 	team.RegisterRoutes(r, db)
 	permission.RegisterRoutes(r, db)
-	document.RegisterRoutes(r, db)
+	document.RegisterRoutes(r, db, redisClient)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {

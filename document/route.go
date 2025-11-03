@@ -5,16 +5,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
 )
 
-func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
+func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 	repo := NewDocumentRepository(db)
-	service := NewDocumentService(repo)
-	handler := NewDocumentHandler(service)
+	service := NewDocumentService(repo, redisClient)
+	handler := NewDocumentHandler(service, redisClient)
+
+	r.GET("/api/documents/view-file", handler.ViewDocument)
 
 	documentRoutes := r.Group("/api/documents")
 	documentRoutes.Use(middleware.AuthMiddleware())
 	{
+		documentRoutes.POST("/generate-view-url", handler.GenerateViewURL)
 		documentRoutes.POST("/upload", handler.UploadDocument)
 		documentRoutes.GET("", handler.GetDocuments)
 		documentRoutes.GET("/details", handler.GetDocumentDetails)
