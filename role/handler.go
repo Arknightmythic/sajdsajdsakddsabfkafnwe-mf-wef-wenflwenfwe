@@ -35,6 +35,8 @@ func (h *RoleHandler) GetAll(c *gin.Context) {
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	search := c.DefaultQuery("search", "")
+	teamIDStr := c.DefaultQuery("team_id", "")
 
 	if limit <= 0 {
 		limit = 10
@@ -46,17 +48,29 @@ func (h *RoleHandler) GetAll(c *gin.Context) {
 		offset = 0
 	}
 
-	roles, total, err := h.service.GetAll(limit, offset)
+	var teamID *int
+	if teamIDStr != "" {
+		tid, err := strconv.Atoi(teamIDStr)
+		if err != nil {
+			util.ErrorResponse(c, http.StatusBadRequest, "Invalid team_id")
+			return
+		}
+		teamID = &tid
+	}
+
+	roles, total, err := h.service.GetAll(limit, offset, search, teamID)
 	if err != nil {
 		util.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	response := map[string]interface{}{
-		"roles":  roles,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
+		"roles":   roles,
+		"total":   total,
+		"limit":   limit,
+		"offset":  offset,
+		"search":  search,
+		"team_id": teamID,
 	}
 
 	util.SuccessResponse(c, "Roles fetched successfully", response)

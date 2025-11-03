@@ -24,13 +24,13 @@ func (s *RoleService) Create(role Role) error {
 	return s.repoRole.Create(role)
 }
 
-func (s *RoleService) GetAll(limit, offset int) ([]GetRoleDTO, int, error) {
-	roles, err := s.repoRole.GetAll(limit, offset)
+func (s *RoleService) GetAll(limit, offset int, search string, teamID *int) ([]GetRoleDTO, int, error) {
+	roles, err := s.repoRole.GetAll(limit, offset, search, teamID)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	total, err := s.repoRole.GetTotal()
+	total, err := s.repoRole.GetTotal(search, teamID)
 	if err != nil {
 		return nil, 0, err
 	}

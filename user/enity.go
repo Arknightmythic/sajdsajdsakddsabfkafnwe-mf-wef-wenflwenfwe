@@ -43,3 +43,12 @@ type PaginatedUsersResponse struct {
 	Offset     int          `json:"offset"`
 	TotalPages int          `json:"total_pages"`
 }
+
+type GetUsersQuery struct {
+	Limit       int     `form:"limit"`
+	Offset      int     `form:"offset"`
+	AccountType *string `form:"account_type"`
+	RoleID      *int    `form:"role_id"`
+	TeamID      *int    `form:"team_id"`
+	Search      *string `form:"search"`
+}

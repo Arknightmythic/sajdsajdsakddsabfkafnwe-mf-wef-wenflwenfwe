@@ -12,13 +12,13 @@ func (s *TeamService) Create(team *Team) error {
 	return s.repo.Create(team)
 }
 
-func (s *TeamService) GetAll(limit, offset int) ([]Team, int, error) {
-	teams, err := s.repo.GetAll(limit, offset)
+func (s *TeamService) GetAll(limit, offset int, search string) ([]Team, int, error) {
+	teams, err := s.repo.GetAll(limit, offset, search)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	total, err := s.repo.GetTotal()
+	total, err := s.repo.GetTotal(search)
 	if err != nil {
 		return nil, 0, err
 	}

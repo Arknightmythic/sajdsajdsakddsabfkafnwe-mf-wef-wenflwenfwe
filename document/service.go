@@ -1,36 +1,32 @@
 package document
 
 import (
+	"context"
+	"dokuprime-be/util"
 	"fmt"
 	"path/filepath"
 	"time"
-	"context"
-	"dokuprime-be/util"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
 type DocumentService struct {
-	repo *DocumentRepository
+	repo  *DocumentRepository
 	redis *redis.Client
 }
 
 func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client) *DocumentService {
 	return &DocumentService{
 		repo:  repo,
-		redis: redisClient, // <-- Inisialisasi Redis
+		redis: redisClient,
 	}
 }
 
-// Fungsi BARU untuk membuat token sekali pakai
 func (s *DocumentService) GenerateViewToken(filename string) (string, error) {
-	// Buat token acak yang unik
-	token := util.RandString(32) //
+	token := util.RandString(32)
 	key := "view_token:" + token
-	
-	// Simpan token di Redis dengan nilai nama file
-	// dan atur masa berlakunya (misal: 5 menit)
+
 	ctx := context.Background()
 	err := s.redis.Set(ctx, key, filename, 5*time.Minute).Err()
 	if err != nil {
@@ -94,6 +90,10 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 		return fmt.Errorf("failed to set is_approve: %w", err)
 	}
 
+	if err := s.repo.UpdateDocumentDetailStatus(detailID, "Approved"); err != nil {
+		return fmt.Errorf("failed to set status to Approved: %w", err)
+	}
+
 	if err := s.repo.UpdateDocumentDetailLatest(detail.DocumentID); err != nil {
 		return fmt.Errorf("failed to update is_latest for other documents: %w", err)
 	}
@@ -106,7 +106,15 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 }
 
 func (s *DocumentService) RejectDocument(detailID int) error {
-	return s.repo.UpdateDocumentDetailApprove(detailID, false)
+	if err := s.repo.UpdateDocumentDetailApprove(detailID, false); err != nil {
+		return fmt.Errorf("failed to set is_approve to false: %w", err)
+	}
+
+	if err := s.repo.UpdateDocumentDetailStatus(detailID, "Rejected"); err != nil {
+		return fmt.Errorf("failed to set status to Rejected: %w", err)
+	}
+
+	return nil
 }
 
 func GenerateUniqueFilename(originalFilename string) string {
@@ -114,4 +122,18 @@ func GenerateUniqueFilename(originalFilename string) string {
 	timestamp := time.Now().Unix()
 	uniqueID := uuid.New().String()
 	return fmt.Sprintf("%d_%s%s", timestamp, uniqueID, ext)
+}
+
+func (s *DocumentService) GetAllDocumentDetails(filter DocumentDetailFilter) ([]DocumentDetail, int, error) {
+	details, err := s.repo.GetAllDocumentDetails(filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.repo.GetTotalDocumentDetails(filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return details, total, nil
 }

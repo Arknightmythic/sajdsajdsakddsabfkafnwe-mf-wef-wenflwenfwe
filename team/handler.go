@@ -43,6 +43,7 @@ func (h *TeamHandler) GetAll(ctx *gin.Context) {
 
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
+	search := ctx.DefaultQuery("search", "")
 
 	if limit <= 0 {
 		limit = 10
@@ -54,7 +55,7 @@ func (h *TeamHandler) GetAll(ctx *gin.Context) {
 		offset = 0
 	}
 
-	teams, total, err := h.service.GetAll(limit, offset)
+	teams, total, err := h.service.GetAll(limit, offset, search)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -65,6 +66,7 @@ func (h *TeamHandler) GetAll(ctx *gin.Context) {
 		"total":  total,
 		"limit":  limit,
 		"offset": offset,
+		"search": search,
 	}
 
 	util.SuccessResponse(ctx, "Teams retrieved successfully", response)

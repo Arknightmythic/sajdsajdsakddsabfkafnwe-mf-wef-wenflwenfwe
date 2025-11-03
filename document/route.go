@@ -26,5 +26,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 		documentRoutes.PUT("/approve/:id", handler.ApproveDocument)
 		documentRoutes.PUT("/reject/:id", handler.RejectDocument)
 		documentRoutes.GET("/download/:filename", handler.DownloadDocument)
+		documentRoutes.GET("/all-details", handler.GetAllDocumentDetails)
+
 	}
 }
