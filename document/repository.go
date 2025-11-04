@@ -333,3 +333,15 @@ func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter
 	err := r.db.QueryRow(query, args...).Scan(&total)
 	return total, err
 }
+
+func (r *DocumentRepository) DeleteDocument(id int) error {
+	query := `DELETE FROM documents WHERE id = $1`
+	_, err := r.db.Exec(query, id)
+	return err
+}
+
+func (r *DocumentRepository) DeleteDocumentDetails(documentID int) error {
+	query := `DELETE FROM document_details WHERE document_id = $1`
+	_, err := r.db.Exec(query, documentID)
+	return err
+}
