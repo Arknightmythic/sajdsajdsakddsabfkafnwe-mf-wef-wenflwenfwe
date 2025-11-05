@@ -2,8 +2,11 @@ package document
 
 import (
 	"context"
+	"dokuprime-be/external"
 	"dokuprime-be/util"
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -12,14 +15,16 @@ import (
 )
 
 type DocumentService struct {
-	repo  *DocumentRepository
-	redis *redis.Client
+	repo           *DocumentRepository
+	redis          *redis.Client
+	asyncProcessor *AsyncProcessor
 }
 
-func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client) *DocumentService {
+func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client, asyncProcessor *AsyncProcessor) *DocumentService {
 	return &DocumentService{
-		repo:  repo,
-		redis: redisClient,
+		repo:           repo,
+		redis:          redisClient,
+		asyncProcessor: asyncProcessor,
 	}
 }
 
@@ -82,6 +87,20 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 		return fmt.Errorf("failed to get document detail: %w", err)
 	}
 
+	if detail.Status != nil && *detail.Status == "Approved" {
+		return fmt.Errorf("document is already approved")
+	}
+
+	document, err := s.repo.GetDocumentByID(detail.DocumentID)
+	if err != nil {
+		return fmt.Errorf("failed to get document: %w", err)
+	}
+
+	filePath := filepath.Join("./uploads/documents", detail.Filename)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return fmt.Errorf("document file not found: %s", detail.Filename)
+	}
+
 	if err := s.repo.UpdateAllDocumentDetailsApprove(detail.DocumentID, false); err != nil {
 		return fmt.Errorf("failed to update is_approve for other documents: %w", err)
 	}
@@ -102,6 +121,22 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 		return fmt.Errorf("failed to set is_latest for approved document: %w", err)
 	}
 
+	extractReq := external.ExtractRequest{
+		ID:       detail.DocumentID,
+		Category: document.Category,
+		Filename: detail.DocumentName,
+		FilePath: filePath,
+	}
+
+	job := ExtractionJob{
+		DetailID: detailID,
+		Request:  extractReq,
+	}
+
+	if err := s.asyncProcessor.SubmitJob(job); err != nil {
+		log.Printf("Warning: Failed to submit extraction job for detail ID %d: %v", detailID, err)
+	}
+
 	return nil
 }
 
@@ -112,6 +147,32 @@ func (s *DocumentService) RejectDocument(detailID int) error {
 
 	if err := s.repo.UpdateDocumentDetailStatus(detailID, "Rejected"); err != nil {
 		return fmt.Errorf("failed to set status to Rejected: %w", err)
+	}
+
+	return nil
+}
+
+func (s *DocumentService) DeleteDocument(documentID int) error {
+
+	details, err := s.repo.GetDocumentDetailsByDocumentID(documentID)
+	if err != nil {
+		return fmt.Errorf("failed to get document details: %w", err)
+	}
+
+	for _, detail := range details {
+		filePath := filepath.Join("./uploads/documents", detail.Filename)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+
+			log.Printf("Warning: Failed to delete file %s: %v\n", filePath, err)
+		}
+	}
+
+	if err := s.repo.DeleteDocumentDetails(documentID); err != nil {
+		return fmt.Errorf("failed to delete document details: %w", err)
+	}
+
+	if err := s.repo.DeleteDocument(documentID); err != nil {
+		return fmt.Errorf("failed to delete document: %w", err)
 	}
 
 	return nil
@@ -136,4 +197,8 @@ func (s *DocumentService) GetAllDocumentDetails(filter DocumentDetailFilter) ([]
 	}
 
 	return details, total, nil
+}
+
+func (s *DocumentService) GetExtractionQueueSize() int {
+	return s.asyncProcessor.GetQueueSize()
 }

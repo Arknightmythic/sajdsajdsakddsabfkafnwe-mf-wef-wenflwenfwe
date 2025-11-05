@@ -5,6 +5,7 @@ import (
 	"dokuprime-be/util"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -110,9 +111,15 @@ func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 }
 
 func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
-	file, err := ctx.FormFile("file")
+	form, err := ctx.MultipartForm()
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "File is required")
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Failed to parse multipart form")
+		return
+	}
+
+	files := form.File["files"]
+	if len(files) == 0 {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "At least one file is required")
 		return
 	}
 
@@ -134,56 +141,112 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	originalFilename := file.Filename
-	ext := strings.ToLower(filepath.Ext(originalFilename))
-	dataType := strings.TrimPrefix(ext, ".")
-
-	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
-	if !validTypes[dataType] {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid file type. Only PDF, DOCX, and TXT are allowed")
-		return
-	}
-
-	uniqueFilename := GenerateUniqueFilename(originalFilename)
-
 	uploadDir := "./uploads/documents"
-	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create upload directory")
 		return
 	}
 
-	filePath := filepath.Join(uploadDir, uniqueFilename)
-	if err := ctx.SaveUploadedFile(file, filePath); err != nil {
-		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to save file")
+	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
+	const maxFileSize = 10 * 1024 * 1024
+
+	var uploadedDocuments []map[string]interface{}
+	var failedUploads []map[string]string
+
+	for _, file := range files {
+		originalFilename := file.Filename
+
+		if file.Size > maxFileSize {
+			failedUploads = append(failedUploads, map[string]string{
+				"filename": originalFilename,
+				"reason":   fmt.Sprintf("File size exceeds maximum limit of %d MB", maxFileSize/(1024*1024)),
+			})
+			continue
+		}
+
+		ext := strings.ToLower(filepath.Ext(originalFilename))
+		dataType := strings.TrimPrefix(ext, ".")
+
+		if !validTypes[dataType] {
+			failedUploads = append(failedUploads, map[string]string{
+				"filename": originalFilename,
+				"reason":   "Invalid file type. Only PDF, DOCX, DOC, and TXT are allowed",
+			})
+			continue
+		}
+
+		uniqueFilename := GenerateUniqueFilename(originalFilename)
+		filePath := filepath.Join(uploadDir, uniqueFilename)
+
+		if err := ctx.SaveUploadedFile(file, filePath); err != nil {
+			failedUploads = append(failedUploads, map[string]string{
+				"filename": originalFilename,
+				"reason":   fmt.Sprintf("Failed to save file: %v", err),
+			})
+			continue
+		}
+
+		document := &Document{
+			Category: category,
+		}
+
+		isLatest := true
+		pendingStatus := "Pending"
+		detail := &DocumentDetail{
+			DocumentName: originalFilename,
+			Filename:     uniqueFilename,
+			DataType:     dataType,
+			Staff:        email.(string),
+			Team:         accountType.(string),
+			Status:       &pendingStatus,
+			IsLatest:     &isLatest,
+			IsApprove:    nil,
+		}
+
+		if err := h.service.CreateDocument(document, detail); err != nil {
+			if removeErr := os.Remove(filePath); removeErr != nil {
+				log.Printf("Warning: Failed to remove file %s after DB error: %v", filePath, removeErr)
+			}
+			failedUploads = append(failedUploads, map[string]string{
+				"filename": originalFilename,
+				"reason":   fmt.Sprintf("Database error: %v", err),
+			})
+			continue
+		}
+
+		uploadedDocuments = append(uploadedDocuments, map[string]interface{}{
+			"document":        document,
+			"document_detail": detail,
+		})
+	}
+
+	response := gin.H{
+		"uploaded_count": len(uploadedDocuments),
+		"failed_count":   len(failedUploads),
+		"uploaded":       uploadedDocuments,
+	}
+
+	if len(failedUploads) > 0 {
+		response["failed"] = failedUploads
+	}
+
+	if len(uploadedDocuments) == 0 {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "No files were uploaded successfully")
 		return
 	}
 
-	document := &Document{
-		Category: category,
+	statusCode := http.StatusCreated
+	message := "Documents uploaded successfully"
+
+	if len(failedUploads) > 0 {
+		statusCode = http.StatusMultiStatus
+		message = "Some documents uploaded successfully, some failed"
 	}
 
-	isLatest := true
-	pendingStatus := "Pending"
-	detail := &DocumentDetail{
-		DocumentName: originalFilename,
-		Filename:     uniqueFilename,
-		DataType:     dataType,
-		Staff:        email.(string),
-		Team:         accountType.(string),
-		Status:       &pendingStatus,
-		IsLatest:     &isLatest,
-		IsApprove:    nil,
-	}
-
-	if err := h.service.CreateDocument(document, detail); err != nil {
-		os.Remove(filePath)
-		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	util.CreatedResponse(ctx, "Document uploaded successfully", gin.H{
-		"document":        document,
-		"document_detail": detail,
+	ctx.JSON(statusCode, gin.H{
+		"success": true,
+		"message": message,
+		"data":    response,
 	})
 }
 
@@ -285,14 +348,14 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 
 	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
 	if !validTypes[dataType] {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid file type. Only PDF, DOCX, and TXT are allowed")
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid file type. Only PDF, DOCX, DOC, and TXT are allowed")
 		return
 	}
 
 	uniqueFilename := GenerateUniqueFilename(originalFilename)
 
 	uploadDir := "./uploads/documents"
-	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create upload directory")
 		return
 	}
@@ -315,7 +378,9 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 	}
 
 	if err := h.service.UpdateDocument(documentID, detail); err != nil {
-		os.Remove(filePath)
+		if removeErr := os.Remove(filePath); removeErr != nil {
+			log.Printf("Warning: Failed to remove file %s after DB error: %v", filePath, removeErr)
+		}
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -351,6 +416,21 @@ func (h *DocumentHandler) RejectDocument(ctx *gin.Context) {
 	}
 
 	util.SuccessResponse(ctx, "Document rejected successfully", nil)
+}
+
+func (h *DocumentHandler) DeleteDocument(ctx *gin.Context) {
+	documentID, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid document ID")
+		return
+	}
+
+	if err := h.service.DeleteDocument(documentID); err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Document and all related details deleted successfully", nil)
 }
 
 func (h *DocumentHandler) DownloadDocument(ctx *gin.Context) {
@@ -434,4 +514,15 @@ func (h *DocumentHandler) GetAllDocumentDetails(ctx *gin.Context) {
 	}
 
 	util.SuccessResponse(ctx, "Document details retrieved successfully", response)
+}
+
+func (h *DocumentHandler) GetQueueStatus(ctx *gin.Context) {
+	queueSize := h.service.GetExtractionQueueSize()
+
+	response := gin.H{
+		"pending_jobs": queueSize,
+		"message":      fmt.Sprintf("There are %d extraction jobs in the queue", queueSize),
+	}
+
+	util.SuccessResponse(ctx, "Queue status retrieved successfully", response)
 }
