@@ -19,6 +19,7 @@ type DocumentDetail struct {
 	IsLatest     *bool     `db:"is_latest" json:"is_latest"`
 	IsApprove    *bool     `db:"is_approve" json:"is_approve"`
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	Category     string    `db:"category" json:"category"`
 }
 
 type DocumentWithDetail struct {

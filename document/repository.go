@@ -228,7 +228,8 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	query := `
         SELECT 
             dd.id, dd.document_id, dd.document_name, dd.filename, dd.data_type, 
-            dd.staff, dd.team, dd.status, dd.is_latest, dd.is_approve, dd.created_at
+            dd.staff, dd.team, dd.status, dd.is_latest, dd.is_approve, dd.created_at,
+            d.category
         FROM document_details dd
         INNER JOIN documents d ON dd.document_id = d.id
         WHERE 1=1
