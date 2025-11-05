@@ -17,7 +17,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	asyncProcessor := NewAsyncProcessor(externalClient, 5)
 
 	repo := NewDocumentRepository(db)
-	service := NewDocumentService(repo, redisClient, asyncProcessor)
+	service := NewDocumentService(repo, redisClient, asyncProcessor, externalClient)
 	handler := NewDocumentHandler(service, redisClient)
 
 	r.GET("/api/documents/view-file", handler.ViewDocument)

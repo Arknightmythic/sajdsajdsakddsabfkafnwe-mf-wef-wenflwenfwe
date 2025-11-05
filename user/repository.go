@@ -2,7 +2,6 @@ package user
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -126,7 +125,6 @@ func (r *UserRepository) DeleteUser(id int) error {
 func (r *UserRepository) GetUserByEmail(email string) (*User, error) {
 	var user User
 	query := `SELECT id, name, email, password, account_type, phone, role_id FROM users WHERE email=$1;`
-	log.Println(query)
 	err := r.DB.Get(&user, query, email)
 	return &user, err
 }
