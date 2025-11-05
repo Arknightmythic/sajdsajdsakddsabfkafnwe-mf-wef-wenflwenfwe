@@ -148,7 +148,12 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 	}
 
 	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
-	const maxFileSize = 10 * 1024 * 1024
+
+	maxFileSizeFromEnv, err := strconv.Atoi(os.Getenv("MAX_FILE_SIZE_ALLOWED"))
+	if err != nil {
+		maxFileSizeFromEnv = 70
+	}
+	maxFileSize := maxFileSizeFromEnv * 1024 * 1024
 
 	var uploadedDocuments []map[string]interface{}
 	var failedUploads []map[string]string
@@ -156,7 +161,7 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 	for _, file := range files {
 		originalFilename := file.Filename
 
-		if file.Size > maxFileSize {
+		if file.Size > int64(maxFileSize) {
 			failedUploads = append(failedUploads, map[string]string{
 				"filename": originalFilename,
 				"reason":   fmt.Sprintf("File size exceeds maximum limit of %d MB", maxFileSize/(1024*1024)),

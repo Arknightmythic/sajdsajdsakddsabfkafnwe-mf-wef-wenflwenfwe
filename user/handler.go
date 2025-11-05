@@ -1,10 +1,10 @@
 package user
 
 import (
-	"net/http"
-	"strconv"
-
 	"dokuprime-be/util"
+	"net/http"
+	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,7 +14,51 @@ type UserHandler struct {
 }
 
 func NewUserHandler(service *UserService) *UserHandler {
-	return &UserHandler{Service: service}
+	return &UserHandler{
+		Service: service,
+	}
+}
+
+func getCookieSettings() (domain string, path string, secure bool, httpOnly bool, sameSite http.SameSite, accessMaxAge int, refreshMaxAge int) {
+	domain = os.Getenv("COOKIE_DOMAIN")
+
+	path = os.Getenv("COOKIE_PATH")
+	if path == "" {
+		path = "/"
+	}
+
+	secure, _ = strconv.ParseBool(os.Getenv("COOKIE_SECURE"))
+
+	httpOnly = true
+	if httpOnlyStr := os.Getenv("COOKIE_HTTP_ONLY"); httpOnlyStr != "" {
+		httpOnly, _ = strconv.ParseBool(httpOnlyStr)
+	}
+
+	sameSiteStr := os.Getenv("COOKIE_SAME_SITE")
+	switch sameSiteStr {
+	case "Strict":
+		sameSite = http.SameSiteStrictMode
+	case "None":
+		sameSite = http.SameSiteNoneMode
+	default:
+		sameSite = http.SameSiteLaxMode
+	}
+
+	accessMaxAge = 3600
+	if maxAgeStr := os.Getenv("COOKIE_ACCESS_TOKEN_MAX_AGE"); maxAgeStr != "" {
+		if parsed, err := strconv.Atoi(maxAgeStr); err == nil {
+			accessMaxAge = parsed
+		}
+	}
+
+	refreshMaxAge = 604800
+	if maxAgeStr := os.Getenv("COOKIE_REFRESH_TOKEN_MAX_AGE"); maxAgeStr != "" {
+		if parsed, err := strconv.Atoi(maxAgeStr); err == nil {
+			refreshMaxAge = parsed
+		}
+	}
+
+	return
 }
 
 func (h *UserHandler) CreateUser(c *gin.Context) {
@@ -119,24 +163,28 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
+	domain, path, secure, httpOnly, sameSite, accessMaxAge, refreshMaxAge := getCookieSettings()
+
+	c.SetSameSite(sameSite)
 	c.SetCookie(
 		"access_token",
 		response.AccessToken,
-		3600,
-		"/",
-		"",
-		false,
-		true,
+		accessMaxAge,
+		path,
+		domain,
+		secure,
+		httpOnly,
 	)
 
+	c.SetSameSite(sameSite)
 	c.SetCookie(
 		"refresh_token",
 		response.RefreshToken,
-		604800,
-		"/",
-		"",
-		false,
-		true,
+		refreshMaxAge,
+		path,
+		domain,
+		secure,
+		httpOnly,
 	)
 
 	util.SuccessResponse(c, "Login successful", response)
@@ -155,8 +203,13 @@ func (h *UserHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("access_token", "", -1, "/", "", false, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
+	domain, path, secure, httpOnly, sameSite, _, _ := getCookieSettings()
+
+	c.SetSameSite(sameSite)
+	c.SetCookie("access_token", "", -1, path, domain, secure, httpOnly)
+
+	c.SetSameSite(sameSite)
+	c.SetCookie("refresh_token", "", -1, path, domain, secure, httpOnly)
 
 	util.SuccessResponse(c, "Logout successful", nil)
 }
@@ -174,14 +227,17 @@ func (h *UserHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	domain, path, secure, httpOnly, sameSite, accessMaxAge, _ := getCookieSettings()
+
+	c.SetSameSite(sameSite)
 	c.SetCookie(
 		"access_token",
 		accessToken,
-		3600,
-		"/",
-		"",
-		false,
-		true,
+		accessMaxAge,
+		path,
+		domain,
+		secure,
+		httpOnly,
 	)
 
 	util.SuccessResponse(c, "Token refreshed successfully", gin.H{

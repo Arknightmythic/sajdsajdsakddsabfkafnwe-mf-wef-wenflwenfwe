@@ -22,7 +22,7 @@ func GenerateAccessToken(userID int64, name, email, accountType string) (string,
 	if expiryStr == "" {
 		expiryStr = "15m"
 	}
-
+	
 	expiry, _ := time.ParseDuration(expiryStr)
 
 	claims := JWTClaims{

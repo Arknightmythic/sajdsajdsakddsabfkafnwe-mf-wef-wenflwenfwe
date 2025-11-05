@@ -32,6 +32,11 @@ type ExtractRequest struct {
 	FilePath string
 }
 
+type DeleteRequest struct {
+	ID       int
+	Category string
+}
+
 func (c *Client) ExtractDocument(req ExtractRequest) error {
 
 	ext := strings.ToLower(filepath.Ext(req.Filename))
@@ -98,6 +103,30 @@ func (c *Client) ExtractDocument(req ExtractRequest) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("external API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+
+func (c *Client) DeleteDocument(req DeleteRequest) error {
+	url := fmt.Sprintf("%s/api/delete?id=%d&category=%s", c.baseURL, req.ID, strings.ToLower(req.Category))
+
+	httpReq, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+
+	httpReq.Header.Set("X-API-Key", os.Getenv("X_API_KEY"))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to send delete request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("external API delete returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return nil

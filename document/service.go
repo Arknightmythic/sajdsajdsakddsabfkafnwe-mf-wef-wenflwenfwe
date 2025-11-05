@@ -18,13 +18,15 @@ type DocumentService struct {
 	repo           *DocumentRepository
 	redis          *redis.Client
 	asyncProcessor *AsyncProcessor
+	externalClient *external.Client
 }
 
-func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client, asyncProcessor *AsyncProcessor) *DocumentService {
+func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client, asyncProcessor *AsyncProcessor, externalClient *external.Client) *DocumentService {
 	return &DocumentService{
 		repo:           repo,
 		redis:          redisClient,
 		asyncProcessor: asyncProcessor,
+		externalClient: externalClient,
 	}
 }
 
@@ -101,6 +103,18 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 		return fmt.Errorf("document file not found: %s", detail.Filename)
 	}
 
+	deleteReq := external.DeleteRequest{
+		ID:       detail.DocumentID,
+		Category: document.Category,
+	}
+
+	if err := s.externalClient.DeleteDocument(deleteReq); err != nil {
+		log.Printf("Warning: Failed to delete document from external API (ID: %d): %v", detail.DocumentID, err)
+
+	} else {
+		log.Printf("Successfully deleted document from external API (ID: %d)", detail.DocumentID)
+	}
+
 	if err := s.repo.UpdateAllDocumentDetailsApprove(detail.DocumentID, false); err != nil {
 		return fmt.Errorf("failed to update is_approve for other documents: %w", err)
 	}
@@ -154,6 +168,23 @@ func (s *DocumentService) RejectDocument(detailID int) error {
 
 func (s *DocumentService) DeleteDocument(documentID int) error {
 
+	document, err := s.repo.GetDocumentByID(documentID)
+	if err != nil {
+		return fmt.Errorf("failed to get document: %w", err)
+	}
+
+	deleteReq := external.DeleteRequest{
+		ID:       documentID,
+		Category: document.Category,
+	}
+
+	if err := s.externalClient.DeleteDocument(deleteReq); err != nil {
+		log.Printf("Warning: Failed to delete document from external API (ID: %d): %v", documentID, err)
+
+	} else {
+		log.Printf("Successfully deleted document from external API (ID: %d)", documentID)
+	}
+
 	details, err := s.repo.GetDocumentDetailsByDocumentID(documentID)
 	if err != nil {
 		return fmt.Errorf("failed to get document details: %w", err)
@@ -162,7 +193,6 @@ func (s *DocumentService) DeleteDocument(documentID int) error {
 	for _, detail := range details {
 		filePath := filepath.Join("./uploads/documents", detail.Filename)
 		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-
 			log.Printf("Warning: Failed to delete file %s: %v\n", filePath, err)
 		}
 	}
