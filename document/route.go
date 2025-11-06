@@ -23,8 +23,12 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	r.GET("/api/documents/view-file", handler.ViewDocument)
 
 	documentRoutes := r.Group("/api/documents")
+
 	documentRoutes.Use(middleware.AuthMiddleware())
 	{
+		documentRoutes.POST("/batch-upload", handler.BatchUploadDocument)
+		documentRoutes.GET("/batch-status", handler.GetBatchUploadStatus)
+
 		documentRoutes.POST("/generate-view-url", handler.GenerateViewURL)
 		documentRoutes.POST("/upload", handler.UploadDocument)
 		documentRoutes.GET("", handler.GetDocuments)
