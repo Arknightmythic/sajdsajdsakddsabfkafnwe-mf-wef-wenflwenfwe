@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"dokuprime-be/chat"
 	"dokuprime-be/config"
 	"dokuprime-be/document"
 	"dokuprime-be/migrate"
@@ -58,6 +59,7 @@ func main() {
 	role.RegisterRoutes(r, db)
 	team.RegisterRoutes(r, db)
 	permission.RegisterRoutes(r, db)
+	chat.RegisterRoutes(r, db)
 
 	asyncProcessor := document.RegisterRoutesWithProcessor(r, db, redisClient)
 

@@ -1,0 +1,274 @@
+package chat
+
+import (
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+)
+
+type ChatRepository struct {
+	db *sqlx.DB
+}
+
+func NewChatRepository(db *sqlx.DB) *ChatRepository {
+	return &ChatRepository{db: db}
+}
+
+
+func (r *ChatRepository) CreateChatHistory(history *ChatHistory) error {
+	query := `
+		INSERT INTO chat_history 
+		(session_id, message, user_id, is_cannot_answer, category, feedback, question_category, question_sub_category)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, created_at
+	`
+	return r.db.QueryRow(
+		query,
+		history.SessionID,
+		history.Message,
+		history.UserID,
+		history.IsCannotAnswer,
+		history.Category,
+		history.Feedback,
+		history.QuestionCategory,
+		history.QuestionSubCategory,
+	).Scan(&history.ID, &history.CreatedAt)
+}
+
+func (r *ChatRepository) GetAllChatHistory(page, pageSize int) ([]ChatHistory, int, error) {
+	offset := (page - 1) * pageSize
+
+	var total int
+	err := r.db.Get(&total, `SELECT COUNT(*) FROM chat_history`)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var histories []ChatHistory
+	query := `
+		SELECT id, session_id, message, created_at, user_id, is_cannot_answer, 
+		       category, feedback, question_category, question_sub_category
+		FROM chat_history
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+	err = r.db.Select(&histories, query, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return histories, total, nil
+}
+
+func (r *ChatRepository) GetChatHistoryByID(id int) (*ChatHistory, error) {
+	var history ChatHistory
+	query := `
+		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+		       category, feedback, question_category, question_sub_category
+		FROM chat_history
+		WHERE id = $1
+	`
+	err := r.db.Get(&history, query, id)
+	if err != nil {
+		return nil, err
+	}
+	return &history, nil
+}
+
+func (r *ChatRepository) GetChatHistoryBySessionID(sessionID uuid.UUID, page, pageSize int) ([]ChatHistory, int, error) {
+	offset := (page - 1) * pageSize
+
+	var total int
+	err := r.db.Get(&total, `SELECT COUNT(*) FROM chat_history WHERE session_id = $1`, sessionID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var histories []ChatHistory
+	query := `
+		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+		       category, feedback, question_category, question_sub_category
+		FROM chat_history
+		WHERE session_id = $1
+		ORDER BY created_at ASC
+		LIMIT $2 OFFSET $3
+	`
+	err = r.db.Select(&histories, query, sessionID, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return histories, total, nil
+}
+
+func (r *ChatRepository) UpdateChatHistory(history *ChatHistory) error {
+	query := `
+		UPDATE chat_history
+		SET message = $1, user_id = $2, is_cannot_answer = $3, category = $4,
+		    feedback = $5, question_category = $6, question_sub_category = $7
+		WHERE id = $8
+	`
+	_, err := r.db.Exec(
+		query,
+		history.Message,
+		history.UserID,
+		history.IsCannotAnswer,
+		history.Category,
+		history.Feedback,
+		history.QuestionCategory,
+		history.QuestionSubCategory,
+		history.ID,
+	)
+	return err
+}
+
+func (r *ChatRepository) DeleteChatHistory(id int) error {
+	_, err := r.db.Exec(`DELETE FROM chat_history WHERE id = $1`, id)
+	return err
+}
+
+
+func (r *ChatRepository) CreateConversation(conv *Conversation) error {
+	if conv.ID == uuid.Nil {
+		conv.ID = uuid.New()
+	}
+
+	query := `
+		INSERT INTO conversations (id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`
+	return r.db.QueryRow(
+		query,
+		conv.ID,
+		conv.StartTimestamp,
+		conv.EndTimestamp,
+		conv.Platform,
+		conv.PlatformUniqueID,
+		conv.IsHelpdesk,
+	).Scan(&conv.ID)
+}
+
+func (r *ChatRepository) GetAllConversations(page, pageSize int) ([]Conversation, int, error) {
+	offset := (page - 1) * pageSize
+
+	var total int
+	err := r.db.Get(&total, `SELECT COUNT(*) FROM conversations`)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var conversations []Conversation
+	query := `
+		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk
+		FROM conversations
+		ORDER BY start_timestamp DESC
+		LIMIT $1 OFFSET $2
+	`
+	err = r.db.Select(&conversations, query, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	
+	for i := range conversations {
+		var histories []ChatHistory
+		historyQuery := `
+			SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			       category, feedback, question_category, question_sub_category
+			FROM chat_history
+			WHERE session_id = $1
+			ORDER BY created_at ASC
+		`
+		err = r.db.Select(&histories, historyQuery, conversations[i].ID)
+		if err == nil {
+			conversations[i].ChatHistory = histories
+		}
+	}
+
+	return conversations, total, nil
+}
+
+func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error) {
+	var conv Conversation
+	query := `
+		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk
+		FROM conversations
+		WHERE id = $1
+	`
+	err := r.db.Get(&conv, query, id)
+	if err != nil {
+		return nil, err
+	}
+
+	
+	var histories []ChatHistory
+	historyQuery := `
+		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+		       category, feedback, question_category, question_sub_category
+		FROM chat_history
+		WHERE session_id = $1
+		ORDER BY created_at ASC
+	`
+	err = r.db.Select(&histories, historyQuery, conv.ID)
+	if err == nil {
+		conv.ChatHistory = histories
+	}
+
+	return &conv, nil
+}
+
+func (r *ChatRepository) UpdateConversation(conv *Conversation) error {
+	query := `
+		UPDATE conversations
+		SET end_timestamp = $1, platform = $2, platform_unique_id = $3, is_helpdesk = $4
+		WHERE id = $5
+	`
+	_, err := r.db.Exec(
+		query,
+		conv.EndTimestamp,
+		conv.Platform,
+		conv.PlatformUniqueID,
+		conv.IsHelpdesk,
+		conv.ID,
+	)
+	return err
+}
+
+func (r *ChatRepository) DeleteConversation(id uuid.UUID) error {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	
+	_, err = tx.Exec(`DELETE FROM chat_history WHERE session_id = $1`, id)
+	if err != nil {
+		return err
+	}
+
+	
+	_, err = tx.Exec(`DELETE FROM conversations WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniqueID string) (*Conversation, error) {
+	var conv Conversation
+	query := `
+		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk
+		FROM conversations
+		WHERE platform = $1 AND platform_unique_id = $2 AND end_timestamp IS NULL
+		ORDER BY start_timestamp DESC
+		LIMIT 1
+	`
+	err := r.db.Get(&conv, query, platform, platformUniqueID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &conv, nil
+}
