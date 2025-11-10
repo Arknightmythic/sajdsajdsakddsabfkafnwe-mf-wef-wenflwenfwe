@@ -126,3 +126,27 @@ func (s *ChatService) GetOrCreateConversation(platform, platformUniqueID string)
 	}
 	return conv, nil
 }
+
+func (s *ChatService) GetChatPairsBySessionID(sessionID *uuid.UUID, page, pageSize int) (*ChatPairsWithPagination, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	pairs, total, err := s.repo.GetChatPairsBySessionID(sessionID, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+
+	return &ChatPairsWithPagination{
+		Data:       pairs,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
+}

@@ -29,6 +29,10 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		chatRoutes.PUT("/history/:id", handler.UpdateChatHistory)
 		chatRoutes.DELETE("/history/:id", handler.DeleteChatHistory)
 
+		chatRoutes.GET("/pairs/session/:session_id", handler.GetChatPairsBySessionID)
+		chatRoutes.GET("/pairs/all", handler.GetChatPairsBySessionID)
+		chatRoutes.GET("/debug/session/:session_id", handler.DebugChatHistory)
+
 		chatRoutes.POST("/conversations", handler.CreateConversation)
 		chatRoutes.GET("/conversations", handler.GetConversations)
 		chatRoutes.GET("/conversations/:id", handler.GetConversationByID)

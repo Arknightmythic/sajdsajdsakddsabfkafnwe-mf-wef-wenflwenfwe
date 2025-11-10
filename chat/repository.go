@@ -13,7 +13,6 @@ func NewChatRepository(db *sqlx.DB) *ChatRepository {
 	return &ChatRepository{db: db}
 }
 
-
 func (r *ChatRepository) CreateChatHistory(history *ChatHistory) error {
 	query := `
 		INSERT INTO chat_history 
@@ -126,15 +125,14 @@ func (r *ChatRepository) DeleteChatHistory(id int) error {
 	return err
 }
 
-
 func (r *ChatRepository) CreateConversation(conv *Conversation) error {
 	if conv.ID == uuid.Nil {
 		conv.ID = uuid.New()
 	}
 
 	query := `
-		INSERT INTO conversations (id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO conversations (id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, context)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
 	`
 	return r.db.QueryRow(
@@ -145,6 +143,7 @@ func (r *ChatRepository) CreateConversation(conv *Conversation) error {
 		conv.Platform,
 		conv.PlatformUniqueID,
 		conv.IsHelpdesk,
+		conv.Context,
 	).Scan(&conv.ID)
 }
 
@@ -159,7 +158,8 @@ func (r *ChatRepository) GetAllConversations(page, pageSize int) ([]Conversation
 
 	var conversations []Conversation
 	query := `
-		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk
+		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, 
+		       COALESCE(context, '') as context
 		FROM conversations
 		ORDER BY start_timestamp DESC
 		LIMIT $1 OFFSET $2
@@ -169,29 +169,13 @@ func (r *ChatRepository) GetAllConversations(page, pageSize int) ([]Conversation
 		return nil, 0, err
 	}
 
-	
-	for i := range conversations {
-		var histories []ChatHistory
-		historyQuery := `
-			SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-			       category, feedback, question_category, question_sub_category
-			FROM chat_history
-			WHERE session_id = $1
-			ORDER BY created_at ASC
-		`
-		err = r.db.Select(&histories, historyQuery, conversations[i].ID)
-		if err == nil {
-			conversations[i].ChatHistory = histories
-		}
-	}
-
 	return conversations, total, nil
 }
 
 func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error) {
 	var conv Conversation
 	query := `
-		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk
+		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, context
 		FROM conversations
 		WHERE id = $1
 	`
@@ -200,7 +184,6 @@ func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error
 		return nil, err
 	}
 
-	
 	var histories []ChatHistory
 	historyQuery := `
 		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
@@ -220,8 +203,8 @@ func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error
 func (r *ChatRepository) UpdateConversation(conv *Conversation) error {
 	query := `
 		UPDATE conversations
-		SET end_timestamp = $1, platform = $2, platform_unique_id = $3, is_helpdesk = $4
-		WHERE id = $5
+		SET end_timestamp = $1, platform = $2, platform_unique_id = $3, is_helpdesk = $4, context = $5
+		WHERE id = $6
 	`
 	_, err := r.db.Exec(
 		query,
@@ -229,6 +212,7 @@ func (r *ChatRepository) UpdateConversation(conv *Conversation) error {
 		conv.Platform,
 		conv.PlatformUniqueID,
 		conv.IsHelpdesk,
+		conv.Context,
 		conv.ID,
 	)
 	return err
@@ -241,13 +225,11 @@ func (r *ChatRepository) DeleteConversation(id uuid.UUID) error {
 	}
 	defer tx.Rollback()
 
-	
 	_, err = tx.Exec(`DELETE FROM chat_history WHERE session_id = $1`, id)
 	if err != nil {
 		return err
 	}
 
-	
 	_, err = tx.Exec(`DELETE FROM conversations WHERE id = $1`, id)
 	if err != nil {
 		return err
@@ -259,7 +241,7 @@ func (r *ChatRepository) DeleteConversation(id uuid.UUID) error {
 func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniqueID string) (*Conversation, error) {
 	var conv Conversation
 	query := `
-		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk
+		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, context
 		FROM conversations
 		WHERE platform = $1 AND platform_unique_id = $2 AND end_timestamp IS NULL
 		ORDER BY start_timestamp DESC
@@ -271,4 +253,121 @@ func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniq
 	}
 
 	return &conv, nil
+}
+
+func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, page, pageSize int) ([]ChatPair, int, error) {
+	var histories []ChatHistory
+	var query string
+	var err error
+
+	if sessionID == nil {
+
+		query = `
+			SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			       category, feedback, question_category, question_sub_category
+			FROM chat_history
+			ORDER BY session_id, created_at ASC
+		`
+		err = r.db.Select(&histories, query)
+	} else {
+
+		query = `
+			SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			       category, feedback, question_category, question_sub_category
+			FROM chat_history
+			WHERE session_id = $1
+			ORDER BY created_at ASC
+		`
+		err = r.db.Select(&histories, query, sessionID)
+	}
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var pairs []ChatPair
+	for i := 0; i < len(histories); i += 2 {
+		if i+1 >= len(histories) {
+			break
+		}
+
+		userRole := getMessageRole(histories[i].Message)
+		assistantRole := getMessageRole(histories[i+1].Message)
+
+		if userRole == "user" && assistantRole == "assistant" {
+			questionContent := extractContent(histories[i].Message)
+			answerContent := extractContent(histories[i+1].Message)
+
+			pairs = append(pairs, ChatPair{
+				QuestionID:       histories[i].ID,
+				QuestionContent:  questionContent,
+				QuestionTime:     histories[i].CreatedAt,
+				AnswerID:         histories[i+1].ID,
+				AnswerContent:    answerContent,
+				AnswerTime:       histories[i+1].CreatedAt,
+				Category:         histories[i].Category,
+				QuestionCategory: histories[i].QuestionCategory,
+				Feedback:         histories[i+1].Feedback,
+				IsCannotAnswer:   histories[i+1].IsCannotAnswer,
+				SessionID:        histories[i].SessionID,
+			})
+		}
+	}
+
+	total := len(pairs)
+	offset := (page - 1) * pageSize
+	end := offset + pageSize
+
+	if offset >= total {
+		return []ChatPair{}, total, nil
+	}
+
+	if end > total {
+		end = total
+	}
+
+	return pairs[offset:end], total, nil
+}
+
+func extractContent(msg Message) string {
+
+	if data, ok := msg["data"].(map[string]interface{}); ok {
+		if content, ok := data["content"].(string); ok {
+			return content
+		}
+	}
+
+	if content, ok := msg["content"].(string); ok {
+		return content
+	}
+
+	return ""
+}
+
+func getMessageRole(msg Message) string {
+	if msgType, ok := msg["type"].(string); ok {
+		if msgType == "human" {
+			return "user"
+		}
+		if msgType == "ai" {
+			return "assistant"
+		}
+	}
+
+	if data, ok := msg["data"].(map[string]interface{}); ok {
+		if msgType, ok := data["type"].(string); ok {
+			if msgType == "human" {
+				return "user"
+			}
+			if msgType == "ai" {
+				return "assistant"
+			}
+		}
+	}
+
+	if role, ok := msg["role"].(string); ok {
+		return role
+	}
+
+	return ""
 }

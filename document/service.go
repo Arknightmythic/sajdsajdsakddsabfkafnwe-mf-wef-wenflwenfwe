@@ -245,12 +245,11 @@ func (s *DocumentService) GetExtractionQueueSize() int {
 	return s.asyncProcessor.GetQueueSize()
 }
 
-func (s *DocumentService) StartBatchUpload(files []*multipart.FileHeader, category, email, accountType string) (string, error) {
+func (s *DocumentService) StartBatchUpload(files []*multipart.FileHeader, category, email, accountType string, autoApprove bool) (string, error) {
 	batchID := util.RandString(16)
 
 	fileDataList := make([]FileData, 0, len(files))
 	for _, fileHeader := range files {
-
 		file, err := fileHeader.Open()
 		if err != nil {
 			log.Printf("Failed to open file %s during preparation: %v", fileHeader.Filename, err)
@@ -277,22 +276,24 @@ func (s *DocumentService) StartBatchUpload(files []*multipart.FileHeader, catego
 	}
 
 	if err := s.setBatchStatus(batchID, map[string]interface{}{
-		"total":      len(fileDataList),
-		"processed":  0,
-		"successful": 0,
-		"failed":     0,
-		"status":     "processing",
-		"started_at": time.Now().Format(time.RFC3339),
+		"total":        len(fileDataList),
+		"processed":    0,
+		"successful":   0,
+		"failed":       0,
+		"extracted":    0,
+		"status":       "processing",
+		"auto_approve": autoApprove,
+		"started_at":   time.Now().Format(time.RFC3339),
 	}); err != nil {
 		return "", fmt.Errorf("failed to set batch status: %w", err)
 	}
 
-	go s.processBatchUpload(batchID, fileDataList, category, email, accountType)
+	go s.processBatchUpload(batchID, fileDataList, category, email, accountType, autoApprove)
 
 	return batchID, nil
 }
 
-func (s *DocumentService) processBatchUpload(batchID string, files []FileData, category, email, accountType string) {
+func (s *DocumentService) processBatchUpload(batchID string, files []FileData, category, email, accountType string, autoApprove bool) {
 	uploadDir := "./uploads/documents"
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Batch %s: Failed to create upload directory: %v", batchID, err)
@@ -311,6 +312,7 @@ func (s *DocumentService) processBatchUpload(batchID string, files []FileData, c
 		processed  int
 		successful int
 		failed     int
+		extracted  int
 		mu         sync.Mutex
 	)
 
@@ -325,24 +327,33 @@ func (s *DocumentService) processBatchUpload(batchID string, files []FileData, c
 			defer wg.Done()
 
 			for file := range jobs {
-				success := s.processFileData(file, category, email, accountType, uploadDir, validTypes, maxFileSize, batchID, workerID)
+				documentID, detailID, success := s.processFileDataWithExtraction(
+					file, category, email, accountType, uploadDir,
+					validTypes, maxFileSize, batchID, workerID, autoApprove,
+				)
 
 				mu.Lock()
 				processed++
 				if success {
 					successful++
+
+					if autoApprove && documentID > 0 && detailID > 0 {
+						extracted++
+					}
 				} else {
 					failed++
 				}
 
 				if processed%10 == 0 || processed == len(files) {
 					s.setBatchStatus(batchID, map[string]interface{}{
-						"total":      len(files),
-						"processed":  processed,
-						"successful": successful,
-						"failed":     failed,
-						"status":     "processing",
-						"started_at": s.getBatchStartTime(batchID),
+						"total":        len(files),
+						"processed":    processed,
+						"successful":   successful,
+						"failed":       failed,
+						"extracted":    extracted,
+						"status":       "processing",
+						"auto_approve": autoApprove,
+						"started_at":   s.getBatchStartTime(batchID),
 					})
 				}
 				mu.Unlock()
@@ -362,27 +373,34 @@ func (s *DocumentService) processBatchUpload(batchID string, files []FileData, c
 		"processed":    processed,
 		"successful":   successful,
 		"failed":       failed,
+		"extracted":    extracted,
 		"status":       "completed",
+		"auto_approve": autoApprove,
 		"started_at":   s.getBatchStartTime(batchID),
 		"completed_at": time.Now().Format(time.RFC3339),
 	})
 
-	log.Printf("Batch %s completed: %d/%d successful, %d failed", batchID, successful, len(files), failed)
+	log.Printf("Batch %s completed: %d/%d successful, %d failed, %d extracted",
+		batchID, successful, len(files), failed, extracted)
 }
 
-func (s *DocumentService) processFileData(fileData FileData, category, email, accountType, uploadDir string, validTypes map[string]bool, maxFileSize int, batchID string, workerID int) bool {
+func (s *DocumentService) processFileDataWithExtraction(
+	fileData FileData, category, email, accountType, uploadDir string,
+	validTypes map[string]bool, maxFileSize int, batchID string,
+	workerID int, autoApprove bool,
+) (int, int, bool) {
 	originalFilename := fileData.Filename
 
 	if fileData.Size > int64(maxFileSize) {
 		log.Printf("Batch %s Worker %d: File %s exceeds size limit", batchID, workerID, originalFilename)
-		return false
+		return 0, 0, false
 	}
 
 	ext := strings.ToLower(filepath.Ext(originalFilename))
 	dataType := strings.TrimPrefix(ext, ".")
 	if !validTypes[dataType] {
 		log.Printf("Batch %s Worker %d: File %s has invalid type", batchID, workerID, originalFilename)
-		return false
+		return 0, 0, false
 	}
 
 	uniqueFilename := GenerateUniqueFilename(originalFilename)
@@ -390,7 +408,7 @@ func (s *DocumentService) processFileData(fileData FileData, category, email, ac
 
 	if err := os.WriteFile(filePath, fileData.Content, 0644); err != nil {
 		log.Printf("Batch %s Worker %d: Failed to write file %s: %v", batchID, workerID, originalFilename, err)
-		return false
+		return 0, 0, false
 	}
 
 	document := &Document{
@@ -398,25 +416,55 @@ func (s *DocumentService) processFileData(fileData FileData, category, email, ac
 	}
 
 	isLatest := true
-	pendingStatus := "Pending"
+	var status string
+	var isApprove *bool
+
+	if autoApprove {
+		status = "Approved"
+		approveTrue := true
+		isApprove = &approveTrue
+	} else {
+		status = "Pending"
+		isApprove = nil
+	}
+
 	detail := &DocumentDetail{
 		DocumentName: originalFilename,
 		Filename:     uniqueFilename,
 		DataType:     dataType,
 		Staff:        email,
 		Team:         accountType,
-		Status:       &pendingStatus,
+		Status:       &status,
 		IsLatest:     &isLatest,
-		IsApprove:    nil,
+		IsApprove:    isApprove,
 	}
 
 	if err := s.CreateDocument(document, detail); err != nil {
 		log.Printf("Batch %s Worker %d: Database error for file %s: %v", batchID, workerID, originalFilename, err)
 		os.Remove(filePath)
-		return false
+		return 0, 0, false
 	}
 
-	return true
+	if autoApprove {
+		extractReq := external.ExtractRequest{
+			ID:       document.ID,
+			Category: category,
+			Filename: originalFilename,
+			FilePath: filePath,
+		}
+
+		if err := s.externalClient.ExtractDocument(extractReq); err != nil {
+			log.Printf("Batch %s Worker %d: Failed to extract file %s (ID: %d) to external API: %v",
+				batchID, workerID, originalFilename, document.ID, err)
+
+			return document.ID, detail.ID, true
+		}
+
+		log.Printf("Batch %s Worker %d: Successfully extracted file %s (ID: %d) to external API",
+			batchID, workerID, originalFilename, document.ID)
+	}
+
+	return document.ID, detail.ID, true
 }
 
 func (s *DocumentService) setBatchStatus(batchID string, status map[string]interface{}) error {

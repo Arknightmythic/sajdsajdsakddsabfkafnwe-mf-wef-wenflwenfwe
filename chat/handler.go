@@ -172,9 +172,10 @@ func (h *ChatHandler) DeleteChatHistory(ctx *gin.Context) {
 
 func (h *ChatHandler) CreateConversation(ctx *gin.Context) {
 	var req struct {
-		Platform         string `json:"platform" binding:"required"`
-		PlatformUniqueID string `json:"platform_unique_id" binding:"required"`
-		IsHelpdesk       bool   `json:"is_helpdesk"`
+		Platform         string  `json:"platform" binding:"required"`
+		PlatformUniqueID string  `json:"platform_unique_id" binding:"required"`
+		IsHelpdesk       bool    `json:"is_helpdesk"`
+		Context          *string `json:"context"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -188,6 +189,7 @@ func (h *ChatHandler) CreateConversation(ctx *gin.Context) {
 		Platform:         req.Platform,
 		PlatformUniqueID: req.PlatformUniqueID,
 		IsHelpdesk:       req.IsHelpdesk,
+		Context:          req.Context,
 	}
 
 	if err := h.service.CreateConversation(conv); err != nil {
@@ -239,6 +241,7 @@ func (h *ChatHandler) UpdateConversation(ctx *gin.Context) {
 		Platform         string     `json:"platform"`
 		PlatformUniqueID string     `json:"platform_unique_id"`
 		IsHelpdesk       bool       `json:"is_helpdesk"`
+		Context          *string    `json:"context"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -252,6 +255,7 @@ func (h *ChatHandler) UpdateConversation(ctx *gin.Context) {
 		Platform:         req.Platform,
 		PlatformUniqueID: req.PlatformUniqueID,
 		IsHelpdesk:       req.IsHelpdesk,
+		Context:          req.Context,
 	}
 
 	if err := h.service.UpdateConversation(conv); err != nil {
@@ -318,6 +322,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			Platform:         req.Platform,
 			PlatformUniqueID: req.PlatformUniqueID,
 			IsHelpdesk:       resp.IsHelpdesk,
+			Context:          nil,
 		}
 		if err := h.service.CreateConversation(conv); err != nil {
 
@@ -363,4 +368,63 @@ func stringSliceToString(slice []string) *string {
 	}
 	result := strings.Join(slice, ", ")
 	return &result
+}
+
+func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
+	sessionIDParam := ctx.Param("session_id")
+
+	var sessionID *uuid.UUID
+	if sessionIDParam != "" && sessionIDParam != "all" {
+		parsed, err := uuid.Parse(sessionIDParam)
+		if err != nil {
+			util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid session ID")
+			return
+		}
+		sessionID = &parsed
+	}
+
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+
+	result, err := h.service.GetChatPairsBySessionID(sessionID, page, pageSize)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Chat pairs retrieved successfully", result)
+}
+
+func (h *ChatHandler) DebugChatHistory(ctx *gin.Context) {
+	sessionID, err := uuid.Parse(ctx.Param("session_id"))
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+
+	var histories []ChatHistory
+	query := `
+		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+		       category, feedback, question_category, question_sub_category
+		FROM chat_history
+		WHERE session_id = $1
+		ORDER BY created_at ASC
+	`
+	err = h.service.repo.db.Select(&histories, query, sessionID)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	debug := make([]map[string]interface{}, 0)
+	for _, h := range histories {
+		info := map[string]interface{}{
+			"id":      h.ID,
+			"message": h.Message,
+			"role":    getMessageRole(h.Message),
+		}
+		debug = append(debug, info)
+	}
+
+	util.SuccessResponse(ctx, "Debug info", debug)
 }

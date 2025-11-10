@@ -35,6 +35,28 @@ type ChatHistory struct {
 	QuestionSubCategory *string   `db:"question_sub_category" json:"question_sub_category,omitempty"`
 }
 
+type ChatPair struct {
+	QuestionID       int       `json:"question_id"`
+	QuestionContent  string    `json:"question_content"`
+	QuestionTime     time.Time `json:"question_time"`
+	AnswerID         int       `json:"answer_id"`
+	AnswerContent    string    `json:"answer_content"`
+	AnswerTime       time.Time `json:"answer_time"`
+	Category         *string   `json:"category,omitempty"`
+	QuestionCategory *string   `json:"question_category,omitempty"`
+	Feedback         *bool     `json:"feedback,omitempty"`
+	IsCannotAnswer   *bool     `json:"is_cannot_answer,omitempty"`
+	SessionID        uuid.UUID `json:"session_id"`
+}
+
+type ChatPairsWithPagination struct {
+	Data       []ChatPair `json:"data"`
+	Total      int        `json:"total"`
+	Page       int        `json:"page"`
+	PageSize   int        `json:"page_size"`
+	TotalPages int        `json:"total_pages"`
+}
+
 type Conversation struct {
 	ID               uuid.UUID     `db:"id" json:"id"`
 	StartTimestamp   time.Time     `db:"start_timestamp" json:"start_timestamp"`
@@ -42,6 +64,7 @@ type Conversation struct {
 	Platform         string        `db:"platform" json:"platform"`
 	PlatformUniqueID string        `db:"platform_unique_id" json:"platform_unique_id"`
 	IsHelpdesk       bool          `db:"is_helpdesk" json:"is_helpdesk"`
+	Context          *string       `db:"context" json:"context"`
 	ChatHistory      []ChatHistory `json:"chat_history,omitempty"`
 }
 
