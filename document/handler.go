@@ -531,3 +531,71 @@ func (h *DocumentHandler) GetQueueStatus(ctx *gin.Context) {
 
 	util.SuccessResponse(ctx, "Queue status retrieved successfully", response)
 }
+
+func (h *DocumentHandler) BatchUploadDocument(ctx *gin.Context) {
+	form, err := ctx.MultipartForm()
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Failed to parse multipart form")
+		return
+	}
+
+	files := form.File["files"]
+	if len(files) == 0 {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "At least one file is required")
+		return
+	}
+
+	category := ctx.PostForm("category")
+	if category == "" {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Category is required")
+		return
+	}
+
+	email, exists := ctx.Get("email")
+	if !exists {
+		util.ErrorResponse(ctx, http.StatusUnauthorized, "User email not found")
+		return
+	}
+
+	accountType, exists := ctx.Get("account_type")
+	if !exists {
+		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
+		return
+	}
+
+	autoApproveStr := ctx.DefaultPostForm("auto_approve", "false")
+	autoApprove := autoApproveStr == "true"
+
+	batchID, err := h.service.StartBatchUpload(files, category, email.(string), accountType.(string), autoApprove)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Batch upload started", gin.H{
+		"batch_id":     batchID,
+		"total_files":  len(files),
+		"auto_approve": autoApprove,
+		"message":      "Files are being processed. Use the batch_id to check status",
+	})
+}
+
+func (h *DocumentHandler) GetBatchUploadStatus(ctx *gin.Context) {
+	batchID := ctx.Query("batch_id")
+	if batchID == "" {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "batch_id is required")
+		return
+	}
+
+	status, err := h.service.GetBatchStatus(batchID)
+	if err != nil {
+		if err.Error() == "batch not found" {
+			util.ErrorResponse(ctx, http.StatusNotFound, "Batch ID not found or expired")
+			return
+		}
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Batch status retrieved successfully", status)
+}

@@ -16,6 +16,7 @@ func InitDB() *sqlx.DB {
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
 	dbDriver := os.Getenv("DB_DRIVER")
+	dbSchema := os.Getenv("DB_SCHEMA")
 
 	defaultDSN := fmt.Sprintf("postgres://%s:%s@%s:%s/postgres?sslmode=disable",
 		dbUser, dbPassword, dbHost, dbPort)
@@ -27,20 +28,20 @@ func InitDB() *sqlx.DB {
 
 	defaultDB.Close()
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		dbUser, dbPassword, dbHost, dbPort, dbName)
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s",
+		dbUser, dbPassword, dbHost, dbPort, dbName, dbSchema)
 
 	db, err := sqlx.Connect(dbDriver, dsn)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	var currentDB string
-	err = db.Get(&currentDB, "SELECT current_database()")
+	var searchPath string
+	err = db.Get(&searchPath, "SHOW search_path")
 	if err != nil {
-		log.Fatalf("Failed to get current database: %v", err)
+		log.Fatalf("Failed to get search_path: %v", err)
 	}
-	log.Printf("Connected to database: %s", currentDB)
+	log.Printf("Connected to database: %s with search_path: %s", dbName, searchPath)
 
 	return db
 }
