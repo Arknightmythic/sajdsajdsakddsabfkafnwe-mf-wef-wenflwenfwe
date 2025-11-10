@@ -147,7 +147,7 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
+	validTypes := map[string]bool{"pdf": true, "txt": true}
 
 	maxFileSizeFromEnv, err := strconv.Atoi(os.Getenv("MAX_FILE_SIZE_ALLOWED"))
 	if err != nil {
@@ -175,7 +175,7 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		if !validTypes[dataType] {
 			failedUploads = append(failedUploads, map[string]string{
 				"filename": originalFilename,
-				"reason":   "Invalid file type. Only PDF, DOCX, DOC, and TXT are allowed",
+				"reason":   "Invalid file type. Only PDF and TXT are allowed",
 			})
 			continue
 		}
@@ -351,9 +351,9 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 	ext := strings.ToLower(filepath.Ext(originalFilename))
 	dataType := strings.TrimPrefix(ext, ".")
 
-	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
+	validTypes := map[string]bool{"pdf": true, "txt": true}
 	if !validTypes[dataType] {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid file type. Only PDF, DOCX, DOC, and TXT are allowed")
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid file type. Only PDF and TXT are allowed")
 		return
 	}
 
