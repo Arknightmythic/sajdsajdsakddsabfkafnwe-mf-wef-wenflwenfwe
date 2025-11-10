@@ -6,6 +6,7 @@ import (
 
 type ExternalAPIConfig struct {
 	BaseURL string
+	APIKey  string
 }
 
 func LoadExternalAPIConfig() *ExternalAPIConfig {
@@ -14,7 +15,13 @@ func LoadExternalAPIConfig() *ExternalAPIConfig {
 		baseURL = "http://172.16.12.98:9534"
 	}
 
+	apiKey := os.Getenv("X_API_KEY")
+	if apiKey == "" {
+		apiKey = "BangJumAwesome"
+	}
+
 	return &ExternalAPIConfig{
 		BaseURL: baseURL,
+		APIKey:  apiKey,
 	}
 }

@@ -57,10 +57,37 @@ func RunMigrations(db *sqlx.DB) {
 		created_at TIMESTAMP DEFAULT NOW()
 	);
 
+	CREATE TABLE IF NOT EXISTS conversations (
+		id UUID PRIMARY KEY,
+		start_timestamp TIMESTAMP NOT NULL,
+		end_timestamp TIMESTAMP,
+		platform TEXT NOT NULL,
+		platform_unique_id TEXT NOT NULL,
+		is_helpdesk BOOLEAN DEFAULT false NOT NULL,
+		context TEXT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS chat_history (
+		id SERIAL PRIMARY KEY,
+		session_id UUID NOT NULL,
+		message JSONB NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		user_id BIGINT,
+		is_cannot_answer BOOLEAN,
+		category TEXT,
+		feedback BOOLEAN,
+		question_category TEXT,
+		question_sub_category TEXT,
+		is_answered BOOLEAN
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_document_details_document_id ON document_details(document_id);
 	CREATE INDEX IF NOT EXISTS idx_document_details_is_latest ON document_details(is_latest);
 	CREATE INDEX IF NOT EXISTS idx_document_details_data_type ON document_details(data_type);
 	CREATE INDEX IF NOT EXISTS idx_document_details_status ON document_details(status);
+	CREATE INDEX IF NOT EXISTS idx_chat_history_session_id ON chat_history(session_id);
+	CREATE INDEX IF NOT EXISTS idx_chat_history_user_id ON chat_history(user_id);
+	CREATE INDEX IF NOT EXISTS idx_conversations_platform_unique_id ON conversations(platform_unique_id);
 
 	-- Add name column if it doesn't exist (for existing databases)
 	DO $$ 

@@ -563,18 +563,20 @@ func (h *DocumentHandler) BatchUploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	
-	batchID, err := h.service.StartBatchUpload(files, category, email.(string), accountType.(string))
+	autoApproveStr := ctx.DefaultPostForm("auto_approve", "false")
+	autoApprove := autoApproveStr == "true"
+
+	batchID, err := h.service.StartBatchUpload(files, category, email.(string), accountType.(string), autoApprove)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	
 	util.SuccessResponse(ctx, "Batch upload started", gin.H{
-		"batch_id":    batchID,
-		"total_files": len(files),
-		"message":     "Files are being processed. Use the batch_id to check status",
+		"batch_id":     batchID,
+		"total_files":  len(files),
+		"auto_approve": autoApprove,
+		"message":      "Files are being processed. Use the batch_id to check status",
 	})
 }
 
