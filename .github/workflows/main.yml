@@ -31,7 +31,7 @@ jobs:
       # SARIF (gates the build)
       - name: Trivy FS (SARIF, fail on HIGH/CRITICAL)
         id: trivy_fs_sarif
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
@@ -46,7 +46,7 @@ jobs:
       # Human-readable table for logs + summary
       - name: Trivy FS (table report for summary)
         if: always()
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
@@ -144,7 +144,7 @@ jobs:
       # SARIF (gates the build)
       - name: Trivy Image (SARIF, fail on HIGH/CRITICAL)
         id: trivy_img_sarif
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
           image-ref: localbuild:${{ github.sha }}
@@ -158,7 +158,7 @@ jobs:
       # Human-readable table for logs + summary
       - name: Trivy Image (table report for summary)
         if: always()
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
           image-ref: localbuild:${{ github.sha }}
