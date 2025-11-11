@@ -1,0 +1,94 @@
+# .github/workflows/trivy-security.yml
+name: Trivy Security (Repo + Container)
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # needed to upload SARIF to Code Scanning (public repos)
+
+env:
+  TRIVY_SEVERITY: CRITICAL,HIGH
+  DOCKERFILE_PATH: ./Dockerfile   # <-- set your specific Dockerfile path here
+
+jobs:
+  # 1) Repo (filesystem) scan -> SARIF
+  repo-scan:
+    name: Trivy – Repository (Code Scanning)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivydb
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0
+        with:
+          scan-type: fs
+          scan-ref: .
+          vuln-type: os,library
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-fs.sarif
+          limit-severities-for-sarif: true
+          exit-code: '1'   # fail job if HIGH/CRITICAL found
+
+      # If your repo is private without GHAS, this upload may fail.
+      # We keep the job failing on vulnerabilities (above), and ignore upload errors.
+      - name: Upload SARIF (repo)
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: trivy-fs.sarif
+
+  # 2) Container scan for a specific Dockerfile
+  image-scan:
+    name: Trivy – Container (${{ env.DOCKERFILE_PATH }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivydb
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          tags: localbuild:${{ github.sha }}
+          load: true
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@v0
+        with:
+          scan-type: image
+          image-ref: localbuild:${{ github.sha }}
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+          limit-severities-for-sarif: true
+          exit-code: '1'   # fail job if HIGH/CRITICAL found
+
+      - name: Upload SARIF (image)
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: trivy-image.sarif
