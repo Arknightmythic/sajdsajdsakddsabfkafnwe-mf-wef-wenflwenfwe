@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"dokuprime-be/config"
 	"dokuprime-be/external"
 	"dokuprime-be/util"
 	"encoding/json"
@@ -110,7 +111,7 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 		return fmt.Errorf("failed to get document: %w", err)
 	}
 
-	filePath := filepath.Join("./uploads/documents", detail.Filename)
+	filePath := config.GetDocumentPath(detail.Filename)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return fmt.Errorf("document file not found: %s", detail.Filename)
 	}
@@ -203,7 +204,7 @@ func (s *DocumentService) DeleteDocument(documentID int) error {
 	}
 
 	for _, detail := range details {
-		filePath := filepath.Join("./uploads/documents", detail.Filename)
+		filePath := config.GetDocumentPath(detail.Filename)
 		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 			log.Printf("Warning: Failed to delete file %s: %v\n", filePath, err)
 		}
@@ -294,7 +295,7 @@ func (s *DocumentService) StartBatchUpload(files []*multipart.FileHeader, catego
 }
 
 func (s *DocumentService) processBatchUpload(batchID string, files []FileData, category, email, accountType string, autoApprove bool) {
-	uploadDir := "./uploads/documents"
+	uploadDir := config.GetUploadPath()
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Batch %s: Failed to create upload directory: %v", batchID, err)
 		return

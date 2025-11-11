@@ -325,7 +325,8 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			Context:          nil,
 		}
 		if err := h.service.CreateConversation(conv); err != nil {
-
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
+			return
 		}
 	}
 
@@ -341,7 +342,8 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		QuestionSubCategory: nil,
 	}
 	if err := h.service.CreateChatHistory(userHistory); err != nil {
-
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
+		return
 	}
 
 	assistantMessage := Message{
@@ -356,10 +358,26 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		Category:       &resp.Category,
 	}
 	if err := h.service.CreateChatHistory(assistantHistory); err != nil {
-
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
+		return
 	}
 
-	util.SuccessResponse(ctx, "Message sent successfully", resp)
+	responseAsk := ResponseAsk{
+		User:             resp.User,
+		ConversationID:   resp.ConversationID,
+		Query:            resp.Query,
+		RewrittenQuery:   resp.RewrittenQuery,
+		Category:         resp.Category,
+		QuestionCategory: resp.QuestionCategory,
+		Answer:           resp.Answer,
+		Citations:        resp.Citations,
+		IsHelpdesk:       resp.IsHelpdesk,
+		IsAnswered:       resp.IsAnswered,
+		Platform:         conv.Platform,
+		PlatformUniqueID: conv.PlatformUniqueID,
+	}
+
+	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 }
 
 func stringSliceToString(slice []string) *string {
