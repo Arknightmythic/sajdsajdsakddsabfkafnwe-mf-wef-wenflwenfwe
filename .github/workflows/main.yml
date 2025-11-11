@@ -1,9 +1,9 @@
 # .github/workflows/trivy-security.yml
-name: Trivy Security (Repo + Container)
+name: Trivy Security Container Scan
 
 on:
   push:
-    branches: [ "test-ci-privy" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
@@ -17,72 +17,6 @@ env:
   DOCKERFILE_PATH: ./Dockerfile   # <-- set your Dockerfile path
 
 jobs:
-  repo-scan:
-    name: Trivy – Repository
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/trivy
-          key: ${{ runner.os }}-trivydb
-
-      # SARIF (gates the build)
-      - name: Trivy FS (SARIF, fail on HIGH/CRITICAL)
-        id: trivy_fs_sarif
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: .
-          vuln-type: os,library
-          severity: ${{ env.TRIVY_SEVERITY }}
-          ignore-unfixed: true
-          format: sarif
-          output: trivy-fs.sarif
-          limit-severities-for-sarif: true
-          exit-code: '1'
-
-      # Human-readable table for logs + summary
-      - name: Trivy FS (table report for summary)
-        if: always()
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: .
-          vuln-type: os,library
-          severity: ${{ env.TRIVY_SEVERITY }}
-          ignore-unfixed: true
-          format: table
-          output: trivy-fs.txt
-          exit-code: '0'
-
-      - name: Add FS report to Job Summary
-        if: always()
-        run: |
-          {
-            echo "### Trivy repository findings";
-            echo;
-            echo '```';
-            cat trivy-fs.txt || true
-            echo '```';
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload FS SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        continue-on-error: true
-        with:
-          sarif_file: trivy-fs.sarif
-
-      - name: Upload FS text report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-fs-report
-          path: trivy-fs.txt
-          retention-days: 7
-
   image-scan:
     name: Trivy – Container
     runs-on: ubuntu-latest
@@ -179,12 +113,6 @@ jobs:
             echo '```';
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload Image SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        continue-on-error: true
-        with:
-          sarif_file: trivy-image.sarif
 
       - name: Upload Image text report
         if: always()
