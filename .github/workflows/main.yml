@@ -3,7 +3,7 @@ name: Trivy Security (Repo + Container)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "test-ci-privy" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
