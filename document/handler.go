@@ -44,7 +44,7 @@ func (h *DocumentHandler) GenerateViewURL(ctx *gin.Context) {
 		return
 	}
 
-	baseURL := "http://" + ctx.Request.Host
+	baseURL := "https://" + ctx.Request.Host
 	viewURL := fmt.Sprintf("%s/api/documents/view-file?token=%s", baseURL, token)
 
 	util.SuccessResponse(ctx, "View URL generated successfully", gin.H{
