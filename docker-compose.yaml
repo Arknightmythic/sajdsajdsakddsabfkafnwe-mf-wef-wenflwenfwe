@@ -1,46 +1,16 @@
 version: '3.8'
 
 services:
-  # 1. Service Backend (Aplikasi Go Anda)
-  bkpmai_be:
-    build: .  # Memberitahu Compose untuk build dari Dockerfile di sini
-    image: bkpmai_be:latest # Nama image yang akan dibuat/digunakan
-    container_name: bkpmai_be_service
-    restart: unless-stopped
-    env_file:
-      - .env # Ini akan memuat file .env Anda (mengatasi warning)
+  app:
+    build: .
     ports:
-      - "8000:8000" # Sesuai 'EXPOSE 8000' di Dockerfile Anda
-    depends_on:
-      - db       # Menunggu service 'db' siap
-      - redis    # Menunggu service 'redis' siap
-
-  # 2. Service Database (Postgres)
-  db:
-    image: postgres:latest
-    container_name: postgres_bkpm
-    restart: unless-stopped
+      - "8080:8080"
+    volumes:
+      - upload_files:/tmp/file_upload
     environment:
-      # Anda HARUS mengatur variabel ini di file .env Anda
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 
-      POSTGRES_DB: dokuprime
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  # 3. Service Redis
-  redis:
-    image: redis:latest
-    container_name: redis_bkpm
+      - UPLOAD_PATH=/tmp/file_upload
     restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
 
-# Mendefinisikan volume untuk menyimpan data secara permanen
 volumes:
-  postgres_data:
-  redis_data:
+  upload_files:
+    driver: local

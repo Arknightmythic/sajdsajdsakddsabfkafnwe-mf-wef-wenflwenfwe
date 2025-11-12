@@ -45,17 +45,40 @@ type ChatRequest struct {
 	Platform         string `json:"platform"`
 }
 
+type FlexibleStringArray []string
+
+func (f *FlexibleStringArray) UnmarshalJSON(data []byte) error {
+
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*f = arr
+		return nil
+	}
+
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	if str != "" {
+		*f = []string{str}
+	} else {
+		*f = []string{}
+	}
+	return nil
+}
+
 type ChatResponse struct {
-	User             string   `json:"user"`
-	ConversationID   string   `json:"conversation_id"`
-	Query            string   `json:"query"`
-	RewrittenQuery   string   `json:"rewritten_query"`
-	Category         string   `json:"category"`
-	QuestionCategory []string `json:"question_category"`
-	Answer           string   `json:"answer"`
-	Citations        []string `json:"citations"`
-	IsHelpdesk       bool     `json:"is_helpdesk"`
-	IsAnswered       *bool    `json:"is_answered"`
+	User             string              `json:"user"`
+	ConversationID   string              `json:"conversation_id"`
+	Query            string              `json:"query"`
+	RewrittenQuery   string              `json:"rewritten_query"`
+	Category         string              `json:"category"`
+	QuestionCategory []string            `json:"question_category"`
+	Answer           string              `json:"answer"`
+	Citations        FlexibleStringArray `json:"citations"`
+	IsHelpdesk       bool                `json:"is_helpdesk"`
+	IsAnswered       *bool               `json:"is_answered"`
 }
 
 func (c *Client) ExtractDocument(req ExtractRequest) error {

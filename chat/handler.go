@@ -3,6 +3,7 @@ package chat
 import (
 	"dokuprime-be/external"
 	"dokuprime-be/util"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -293,6 +294,9 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
+	log.Println(req.ConversationID, " CONVERSATION ID")
+	log.Println(req.PlatformUniqueID, " PLATFORM UNIQUE ID")
 
 	chatReq := external.ChatRequest{
 		PlatformUniqueID: req.PlatformUniqueID,

@@ -43,7 +43,7 @@ type ResponseAsk struct {
 	Category         string   `json:"category"`
 	QuestionCategory []string `json:"question_category"`
 	Answer           string   `json:"answer"`
-	Citations        []string `json:"citations"`
+	Citations        []string `json:"citations"` 
 	IsHelpdesk       bool     `json:"is_helpdesk"`
 	IsAnswered       *bool    `json:"is_answered"`
 	Platform         string   `json:"platform"`
