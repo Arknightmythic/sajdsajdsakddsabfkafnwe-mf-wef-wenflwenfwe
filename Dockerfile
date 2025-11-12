@@ -27,7 +27,7 @@ COPY .env.production .env
 # Create upload directory with proper permissions
 RUN mkdir -p /tmp/file_upload && chmod 777 /tmp/file_upload
 
-EXPOSE 8080
+EXPOSE 8000
 
 VOLUME ["/tmp/file_upload"]
 
