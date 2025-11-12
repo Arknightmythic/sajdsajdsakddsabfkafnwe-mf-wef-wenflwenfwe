@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"dokuprime-be/config"
 	"dokuprime-be/util"
 	"fmt"
 	"io"
@@ -74,7 +75,7 @@ func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 
 	h.redis.Del(ctxRedis, key)
 
-	filePath := filepath.Join("./uploads/documents", filename)
+	filePath := config.GetDocumentPath(filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		util.ErrorResponse(ctx, http.StatusNotFound, "File not found")
@@ -141,7 +142,7 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	uploadDir := "./uploads/documents"
+	uploadDir := config.GetUploadPath()
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create upload directory")
 		return
@@ -359,7 +360,7 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 
 	uniqueFilename := GenerateUniqueFilename(originalFilename)
 
-	uploadDir := "./uploads/documents"
+	uploadDir := config.GetUploadPath()
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create upload directory")
 		return
@@ -445,7 +446,7 @@ func (h *DocumentHandler) DownloadDocument(ctx *gin.Context) {
 		return
 	}
 
-	filePath := filepath.Join("./uploads/documents", filename)
+	filePath := config.GetDocumentPath(filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		util.ErrorResponse(ctx, http.StatusNotFound, "File not found")

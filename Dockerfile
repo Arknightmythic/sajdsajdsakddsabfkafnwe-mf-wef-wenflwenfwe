@@ -1,40 +1,34 @@
 # Build stage
 FROM golang:1.25-alpine AS builder
 
-# Install build dependencies
 RUN apk add --no-cache git
 
-# Set working directory
 WORKDIR /app
 
-# Copy go mod files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates
 
 WORKDIR /root/
 
-# Copy the binary from builder
 COPY --from=builder /app/main .
 
-# Copy .env file
-COPY .env .
+# Copy production env file as .env
+COPY .env.production .env
 
-# Expose port
+# Create upload directory with proper permissions
+RUN mkdir -p /tmp/file_upload && chmod 777 /tmp/file_upload
+
 EXPOSE 8080
 
-# Run the application
+VOLUME ["/tmp/file_upload"]
+
 CMD ["./main"]

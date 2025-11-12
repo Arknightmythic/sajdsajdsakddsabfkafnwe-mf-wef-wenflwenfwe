@@ -5,13 +5,13 @@ import (
 	"dokuprime-be/chat"
 	"dokuprime-be/config"
 	"dokuprime-be/document"
+	"dokuprime-be/grafana"
 	"dokuprime-be/migrate"
 	"dokuprime-be/permission"
 	"dokuprime-be/role"
 	"dokuprime-be/seeder"
 	"dokuprime-be/team"
 	"dokuprime-be/user"
-	"dokuprime-be/grafana"
 	"log"
 	"net/http"
 	"os"
@@ -60,22 +60,22 @@ func main() {
 	role.RegisterRoutes(r, db)
 	team.RegisterRoutes(r, db)
 	permission.RegisterRoutes(r, db)
-	grafana.RegisterRoutes(r,redisClient)
+	grafana.RegisterRoutes(r, redisClient)
 	chat.RegisterRoutes(r, db)
 	asyncProcessor := document.RegisterRoutesWithProcessor(r, db, redisClient)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
-		port = "8080"
+		port = "8000"
 	}
 
 	srv := &http.Server{
-		Addr:    ":" + port,
+		Addr:    "0.0.0.0:8000",
 		Handler: r,
 	}
 
 	go func() {
-		log.Printf("Server running at http://localhost:%s\n", port)
+		log.Printf("Server running at http://0.0.0.0:%s\n", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
