@@ -383,15 +383,16 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		PlatformUniqueID: conv.PlatformUniqueID,
 	}
 
-	if chatReq.Platform == "web" {
-		util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
-	} else {
-		if err := h.externalClient.SendMessageToAPI(responseAsk); err != nil {
-			log.Println("Line 390", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to send message to external API: "+err.Error())
-			return
-		}
-	}
+	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
+	// if chatReq.Platform == "web" {
+	// 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
+	// } else {
+	// 	if err := h.externalClient.SendMessageToAPI(responseAsk); err != nil {
+	// 		log.Println("Line 390", err)
+	// 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to send message to external API: "+err.Error())
+	// 		return
+	// 	}
+	// }
 }
 
 func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
