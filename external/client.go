@@ -15,14 +15,16 @@ import (
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL     string
+	messagesURL string
+	httpClient  *http.Client
 }
 
 func NewClient(cfg *config.ExternalAPIConfig) *Client {
 	return &Client{
-		baseURL:    cfg.BaseURL,
-		httpClient: &http.Client{},
+		baseURL:     cfg.BaseURL,
+		messagesURL: cfg.MessagesAPIURL,
+		httpClient:  &http.Client{},
 	}
 }
 
@@ -213,4 +215,46 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	}
 
 	return &chatResp, nil
+}
+
+type MessageAPIRequest struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+func (c *Client) SendMessageToAPI(data interface{}) error {
+	url := c.messagesURL + "/api/messages"
+
+	requestBody := MessageAPIRequest{
+		Status:  "success",
+		Message: "Message sent successfully",
+		Data:    data,
+	}	
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-API-Key", os.Getenv("MESSAGES_API_KEY"))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("messages API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
 }
