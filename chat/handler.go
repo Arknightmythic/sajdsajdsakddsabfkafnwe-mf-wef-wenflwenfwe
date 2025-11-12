@@ -3,6 +3,7 @@ package chat
 import (
 	"dokuprime-be/external"
 	"dokuprime-be/util"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -289,6 +290,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		log.Println("Line 293", err)
 		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
 		return
 	}
@@ -302,12 +304,14 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 	resp, err := h.externalClient.SendChatMessage(chatReq)
 	if err != nil {
+		log.Println("Line 307", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	conversationID, err := uuid.Parse(resp.ConversationID)
 	if err != nil {
+		log.Println("Line 314", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Invalid conversation ID from external API")
 		return
 	}
@@ -324,6 +328,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			Context:          nil,
 		}
 		if err := h.service.CreateConversation(conv); err != nil {
+			log.Println("Line 331", err)
 			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
 			return
 		}
@@ -382,6 +387,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 	} else {
 		if err := h.externalClient.SendMessageToAPI(responseAsk); err != nil {
+			log.Println("Line 390", err)
 			util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to send message to external API: "+err.Error())
 			return
 		}
