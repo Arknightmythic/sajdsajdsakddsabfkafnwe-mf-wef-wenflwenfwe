@@ -15,14 +15,16 @@ import (
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL     string
+	messagesURL string
+	httpClient  *http.Client
 }
 
 func NewClient(cfg *config.ExternalAPIConfig) *Client {
 	return &Client{
-		baseURL:    cfg.BaseURL,
-		httpClient: &http.Client{},
+		baseURL:     cfg.BaseURL,
+		messagesURL: cfg.MessagesAPIURL,
+		httpClient:  &http.Client{},
 	}
 }
 
@@ -45,17 +47,40 @@ type ChatRequest struct {
 	Platform         string `json:"platform"`
 }
 
+type FlexibleStringArray []string
+
+func (f *FlexibleStringArray) UnmarshalJSON(data []byte) error {
+
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*f = arr
+		return nil
+	}
+
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	if str != "" {
+		*f = []string{str}
+	} else {
+		*f = []string{}
+	}
+	return nil
+}
+
 type ChatResponse struct {
-	User             string   `json:"user"`
-	ConversationID   string   `json:"conversation_id"`
-	Query            string   `json:"query"`
-	RewrittenQuery   string   `json:"rewritten_query"`
-	Category         string   `json:"category"`
-	QuestionCategory []string `json:"question_category"`
-	Answer           string   `json:"answer"`
-	Citations        []string `json:"citations"`
-	IsHelpdesk       bool     `json:"is_helpdesk"`
-	IsAnswered       *bool    `json:"is_answered"`
+	User             string              `json:"user"`
+	ConversationID   string              `json:"conversation_id"`
+	Query            string              `json:"query"`
+	RewrittenQuery   string              `json:"rewritten_query"`
+	Category         string              `json:"category"`
+	QuestionCategory []string            `json:"question_category"`
+	Answer           string              `json:"answer"`
+	Citations        FlexibleStringArray `json:"citations"`
+	IsHelpdesk       bool                `json:"is_helpdesk"`
+	IsAnswered       *bool               `json:"is_answered"`
 }
 
 func (c *Client) ExtractDocument(req ExtractRequest) error {
@@ -190,4 +215,46 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	}
 
 	return &chatResp, nil
+}
+
+type MessageAPIRequest struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+func (c *Client) SendMessageToAPI(data interface{}) error {
+	url := c.messagesURL + "/api/messages"
+
+	requestBody := MessageAPIRequest{
+		Status:  "success",
+		Message: "Message sent successfully",
+		Data:    data,
+	}	
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-API-Key", os.Getenv("MESSAGES_API_KEY"))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("messages API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
 }

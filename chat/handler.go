@@ -3,9 +3,9 @@ package chat
 import (
 	"dokuprime-be/external"
 	"dokuprime-be/util"
+	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -290,6 +290,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		log.Println("Line 293", err)
 		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
 		return
 	}
@@ -303,12 +304,14 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 	resp, err := h.externalClient.SendChatMessage(chatReq)
 	if err != nil {
+		log.Println("Line 307", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	conversationID, err := uuid.Parse(resp.ConversationID)
 	if err != nil {
+		log.Println("Line 314", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Invalid conversation ID from external API")
 		return
 	}
@@ -325,49 +328,71 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			Context:          nil,
 		}
 		if err := h.service.CreateConversation(conv); err != nil {
-
+			log.Println("Line 331", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
+			return
 		}
 	}
 
-	userMessage := Message{
-		"role":    "user",
-		"content": req.Query,
-	}
-	userHistory := &ChatHistory{
-		SessionID:           conversationID,
-		Message:             userMessage,
-		Category:            &resp.Category,
-		QuestionCategory:    stringSliceToString(resp.QuestionCategory),
-		QuestionSubCategory: nil,
-	}
-	if err := h.service.CreateChatHistory(userHistory); err != nil {
+	// userMessage := Message{
+	// 	"role":    "user",
+	// 	"content": req.Query,
+	// }
 
+	// userHistory := &ChatHistory{
+	// 	SessionID:           conversationID,
+	// 	Message:             userMessage,
+	// 	Category:            &resp.Category,
+	// 	QuestionCategory:    stringSliceToString(resp.QuestionCategory),
+	// 	QuestionSubCategory: nil,
+	// }
+
+	// if err := h.service.CreateChatHistory(userHistory); err != nil {
+	// 	util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
+	// 	return
+	// }
+
+	// assistantMessage := Message{
+	// 	"role":    "assistant",
+	// 	"content": resp.Answer,
+	// }
+	// isCannotAnswer := resp.IsAnswered != nil && !*resp.IsAnswered
+	// assistantHistory := &ChatHistory{
+	// 	SessionID:      conversationID,
+	// 	Message:        assistantMessage,
+	// 	IsCannotAnswer: &isCannotAnswer,
+	// 	Category:       &resp.Category,
+	// }
+	// if err := h.service.CreateChatHistory(assistantHistory); err != nil {
+	// 	util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
+	// 	return
+	// }
+
+	responseAsk := ResponseAsk{
+		User:             resp.User,
+		ConversationID:   resp.ConversationID,
+		Query:            resp.Query,
+		RewrittenQuery:   resp.RewrittenQuery,
+		Category:         resp.Category,
+		QuestionCategory: resp.QuestionCategory,
+		Answer:           resp.Answer,
+		Citations:        resp.Citations,
+		IsHelpdesk:       resp.IsHelpdesk,
+		IsAnswered:       resp.IsAnswered,
+		Platform:         conv.Platform,
+		PlatformUniqueID: conv.PlatformUniqueID,
 	}
 
-	assistantMessage := Message{
-		"role":    "assistant",
-		"content": resp.Answer,
-	}
-	isCannotAnswer := resp.IsAnswered != nil && !*resp.IsAnswered
-	assistantHistory := &ChatHistory{
-		SessionID:      conversationID,
-		Message:        assistantMessage,
-		IsCannotAnswer: &isCannotAnswer,
-		Category:       &resp.Category,
-	}
-	if err := h.service.CreateChatHistory(assistantHistory); err != nil {
-
-	}
-
-	util.SuccessResponse(ctx, "Message sent successfully", resp)
-}
-
-func stringSliceToString(slice []string) *string {
-	if len(slice) == 0 {
-		return nil
-	}
-	result := strings.Join(slice, ", ")
-	return &result
+	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
+	// if chatReq.Platform == "web" {
+	// 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
+	// } else {
+	// 	if err := h.externalClient.SendMessageToAPI(responseAsk); err != nil {
+	// 		log.Println("Line 390", err)
+	// 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to send message to external API: "+err.Error())
+	// 		return
+	// 	}
+	// }
 }
 
 func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {

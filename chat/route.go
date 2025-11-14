@@ -41,4 +41,10 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 		chatRoutes.POST("/ask", handler.Ask)
 	}
+
+	apiKeyRoutes := r.Group("/api/chat/multichannel")
+	apiKeyRoutes.Use(middleware.APIKeyMiddleware())
+	{
+		apiKeyRoutes.POST("/ask", handler.Ask)
+	}
 }

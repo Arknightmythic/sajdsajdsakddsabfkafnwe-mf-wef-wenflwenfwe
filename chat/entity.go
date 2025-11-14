@@ -35,6 +35,21 @@ type ChatHistory struct {
 	QuestionSubCategory *string   `db:"question_sub_category" json:"question_sub_category,omitempty"`
 }
 
+type ResponseAsk struct {
+	User             string   `json:"user"`
+	ConversationID   string   `json:"conversation_id"`
+	Query            string   `json:"query"`
+	RewrittenQuery   string   `json:"rewritten_query"`
+	Category         string   `json:"category"`
+	QuestionCategory []string `json:"question_category"`
+	Answer           string   `json:"answer"`
+	Citations        []string `json:"citations"` 
+	IsHelpdesk       bool     `json:"is_helpdesk"`
+	IsAnswered       *bool    `json:"is_answered"`
+	Platform         string   `json:"platform"`
+	PlatformUniqueID string   `json:"platform_unique_id"`
+}
+
 type ChatPair struct {
 	QuestionID       int       `json:"question_id"`
 	QuestionContent  string    `json:"question_content"`
