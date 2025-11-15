@@ -190,7 +190,7 @@ func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error
 		       category, feedback, question_category, question_sub_category
 		FROM chat_history
 		WHERE session_id = $1
-		ORDER BY created_at ASC
+		ORDER BY id ASC
 	`
 	err = r.db.Select(&histories, historyQuery, conv.ID)
 	if err == nil {
