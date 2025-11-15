@@ -40,6 +40,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		chatRoutes.DELETE("/conversations/:id", handler.DeleteConversation)
 
 		chatRoutes.POST("/ask", handler.Ask)
+		chatRoutes.POST("/validate", handler.ValidateAnswer)
+
 	}
 
 	apiKeyRoutes := r.Group("/api/chat/multichannel")
