@@ -161,6 +161,7 @@ func (r *ChatRepository) GetAllConversations(page, pageSize int) ([]Conversation
 		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, 
 		       COALESCE(context, '') as context
 		FROM conversations
+		WHERE platform='web'
 		ORDER BY start_timestamp DESC
 		LIMIT $1 OFFSET $2
 	`
@@ -190,7 +191,7 @@ func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error
 		       category, feedback, question_category, question_sub_category
 		FROM chat_history
 		WHERE session_id = $1
-		ORDER BY id ASC
+		ORDER BY created_at ASC
 	`
 	err = r.db.Select(&histories, historyQuery, conv.ID)
 	if err == nil {
