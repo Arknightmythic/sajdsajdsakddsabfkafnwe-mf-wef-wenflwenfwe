@@ -150,3 +150,7 @@ func (s *ChatService) GetChatPairsBySessionID(sessionID *uuid.UUID, page, pageSi
 		TotalPages: totalPages,
 	}, nil
 }
+
+func (s *ChatService) UpdateIsAnsweredStatus(questionID, answerID int, isAnswered bool) error {
+	return s.repo.UpdateIsAnsweredStatus(questionID, answerID, isAnswered)
+}

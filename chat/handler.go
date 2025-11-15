@@ -3,8 +3,11 @@ package chat
 import (
 	"dokuprime-be/external"
 	"dokuprime-be/util"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -334,40 +337,6 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		}
 	}
 
-	// userMessage := Message{
-	// 	"role":    "user",
-	// 	"content": req.Query,
-	// }
-
-	// userHistory := &ChatHistory{
-	// 	SessionID:           conversationID,
-	// 	Message:             userMessage,
-	// 	Category:            &resp.Category,
-	// 	QuestionCategory:    stringSliceToString(resp.QuestionCategory),
-	// 	QuestionSubCategory: nil,
-	// }
-
-	// if err := h.service.CreateChatHistory(userHistory); err != nil {
-	// 	util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
-	// 	return
-	// }
-
-	// assistantMessage := Message{
-	// 	"role":    "assistant",
-	// 	"content": resp.Answer,
-	// }
-	// isCannotAnswer := resp.IsAnswered != nil && !*resp.IsAnswered
-	// assistantHistory := &ChatHistory{
-	// 	SessionID:      conversationID,
-	// 	Message:        assistantMessage,
-	// 	IsCannotAnswer: &isCannotAnswer,
-	// 	Category:       &resp.Category,
-	// }
-	// if err := h.service.CreateChatHistory(assistantHistory); err != nil {
-	// 	util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
-	// 	return
-	// }
-
 	responseAsk := ResponseAsk{
 		User:             resp.User,
 		ConversationID:   resp.ConversationID,
@@ -384,15 +353,6 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 	}
 
 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
-	// if chatReq.Platform == "web" {
-	// 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
-	// } else {
-	// 	if err := h.externalClient.SendMessageToAPI(responseAsk); err != nil {
-	// 		log.Println("Line 390", err)
-	// 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to send message to external API: "+err.Error())
-	// 		return
-	// 	}
-	// }
 }
 
 func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
@@ -452,4 +412,64 @@ func (h *ChatHandler) DebugChatHistory(ctx *gin.Context) {
 	}
 
 	util.SuccessResponse(ctx, "Debug info", debug)
+}
+
+func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
+	var req struct {
+		QuestionID int    `json:"question_id" binding:"required"`
+		Question   string `json:"question" binding:"required"`
+		AnswerID   int    `json:"answer_id" binding:"required"`
+		Answer     string `json:"answer" binding:"required"`
+		Validate   bool   `json:"validate" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.service.UpdateIsAnsweredStatus(req.QuestionID, req.AnswerID, req.Validate); err != nil {
+		log.Println("Error updating is_answered status:", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to update validation status")
+		return
+	}
+
+	if req.Validate {
+
+		tempFileName := fmt.Sprintf("qa_%d_%d.txt", req.QuestionID, req.AnswerID)
+		tempFilePath := filepath.Join(os.TempDir(), tempFileName)
+
+		content := fmt.Sprintf("Q:%s\nA:%s", req.Question, req.Answer)
+		if err := os.WriteFile(tempFilePath, []byte(content), 0644); err != nil {
+			log.Println("Error creating temp file:", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create temporary file")
+			return
+		}
+
+		extractReq := external.ExtractRequest{
+			ID:       req.QuestionID,
+			Category: "validated_qa",
+			Filename: tempFileName,
+			FilePath: tempFilePath,
+		}
+
+		if err := h.externalClient.ExtractDocument(extractReq); err != nil {
+			log.Println("Error extracting document:", err)
+
+			os.Remove(tempFilePath)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to upload document to external API")
+			return
+		}
+
+		if err := os.Remove(tempFilePath); err != nil {
+			log.Println("Warning: Failed to delete temp file:", err)
+
+		}
+	}
+
+	util.SuccessResponse(ctx, "Answer validation updated successfully", gin.H{
+		"question_id": req.QuestionID,
+		"answer_id":   req.AnswerID,
+		"validate":    req.Validate,
+	})
 }

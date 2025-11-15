@@ -371,3 +371,25 @@ func getMessageRole(msg Message) string {
 
 	return ""
 }
+
+func (r *ChatRepository) UpdateIsAnsweredStatus(questionID, answerID int, isAnswered bool) error {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	queryQuestion := `UPDATE chat_history SET is_cannot_answer = $1 WHERE id = $2`
+	_, err = tx.Exec(queryQuestion, !isAnswered, questionID)
+	if err != nil {
+		return err
+	}
+
+	queryAnswer := `UPDATE chat_history SET is_cannot_answer = $1 WHERE id = $2`
+	_, err = tx.Exec(queryAnswer, !isAnswered, answerID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
