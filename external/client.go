@@ -2,7 +2,6 @@ package external
 
 import (
 	"bytes"
-	"context"
 	"dokuprime-be/config"
 	"encoding/json"
 	"fmt"
@@ -13,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type Client struct {
@@ -26,15 +24,7 @@ func NewClient(cfg *config.ExternalAPIConfig) *Client {
 	return &Client{
 		baseURL:     cfg.BaseURL,
 		messagesURL: cfg.MessagesAPIURL,
-		httpClient: &http.Client{
-			Timeout: 1000 * time.Minute,
-			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 100,
-				IdleConnTimeout:     90 * time.Second,
-				DisableKeepAlives:   false,
-			},
-		},
+		httpClient:  &http.Client{},
 	}
 }
 
@@ -60,6 +50,7 @@ type ChatRequest struct {
 type FlexibleStringArray []string
 
 func (f *FlexibleStringArray) UnmarshalJSON(data []byte) error {
+
 	var arr []string
 	if err := json.Unmarshal(data, &arr); err == nil {
 		*f = arr
@@ -93,6 +84,7 @@ type ChatResponse struct {
 }
 
 func (c *Client) ExtractDocument(req ExtractRequest) error {
+
 	ext := strings.ToLower(filepath.Ext(req.Filename))
 	var endpoint string
 
@@ -135,70 +127,27 @@ func (c *Client) ExtractDocument(req ExtractRequest) error {
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
 
-	contentType := writer.FormDataContentType()
 	if err := writer.Close(); err != nil {
 		return fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
 	url := c.baseURL + endpoint
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, body)
+	httpReq, err := http.NewRequest("POST", url, body)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("Content-Type", contentType)
+	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 	httpReq.Header.Set("X-API-Key", os.Getenv("X_API_KEY"))
-	httpReq.Header.Set("Content-Length", strconv.FormatInt(int64(body.Len()), 10))
 
-	maxRetries := 3
-	var resp *http.Response
-	var lastErr error
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-
-			waitTime := time.Duration(attempt) * time.Second
-			time.Sleep(waitTime)
-
-			body.Reset()
-			file.Seek(0, 0)
-			writer = multipart.NewWriter(body)
-			writer.WriteField("id", strconv.Itoa(req.ID))
-			writer.WriteField("category", req.Category)
-			writer.WriteField("filename", req.Filename)
-			part, _ = writer.CreateFormFile("file", req.Filename)
-			io.Copy(part, file)
-			contentType = writer.FormDataContentType()
-			writer.Close()
-
-			httpReq, _ = http.NewRequestWithContext(ctx, "POST", url, body)
-			httpReq.Header.Set("Content-Type", contentType)
-			httpReq.Header.Set("X-API-Key", os.Getenv("X_API_KEY"))
-			httpReq.Header.Set("Content-Length", strconv.FormatInt(int64(body.Len()), 10))
-		}
-
-		resp, err = c.httpClient.Do(httpReq)
-		if err == nil {
-			break
-		}
-		lastErr = err
-	}
-
+	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("failed to send request after %d attempts: %w", maxRetries, lastErr)
+		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("external API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -208,10 +157,7 @@ func (c *Client) ExtractDocument(req ExtractRequest) error {
 func (c *Client) DeleteDocument(req DeleteRequest) error {
 	url := fmt.Sprintf("%s/api/delete?id=%d&category=%s", c.baseURL, req.ID, strings.ToLower(req.Category))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	httpReq, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	httpReq, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
@@ -240,10 +186,7 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -294,10 +237,7 @@ func (c *Client) SendMessageToAPI(data interface{}) error {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
