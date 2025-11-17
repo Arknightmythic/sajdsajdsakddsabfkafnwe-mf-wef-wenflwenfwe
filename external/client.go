@@ -27,7 +27,7 @@ func NewClient(cfg *config.ExternalAPIConfig) *Client {
 		baseURL:     cfg.BaseURL,
 		messagesURL: cfg.MessagesAPIURL,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Minute,
+			Timeout: 1000 * time.Minute,
 			Transport: &http.Transport{
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 100,
