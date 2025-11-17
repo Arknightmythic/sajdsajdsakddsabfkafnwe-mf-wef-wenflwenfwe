@@ -2,6 +2,8 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -25,6 +27,14 @@ func NewUserService(repo *UserRepository, redisClient *redis.Client, serviceRole
 		Redis:       redisClient,
 		serviceRole: serviceRole,
 	}
+}
+
+func generateSessionID() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 func (s *UserService) CreateUser(user *User) (*User, error) {
@@ -136,6 +146,11 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 		return nil, errors.New("invalid email or password")
 	}
 
+	sessionID, err := generateSessionID()
+	if err != nil {
+		return nil, errors.New("failed to generate session")
+	}
+
 	accountType := ""
 	if user.AccountType != nil {
 		accountType = *user.AccountType
@@ -152,11 +167,19 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 	}
 
 	ctx := context.Background()
-	key := fmt.Sprintf("refresh_token:%d", user.ID)
+	key := fmt.Sprintf("refresh_token:%d:%s", user.ID, sessionID)
 	err = s.Redis.Set(ctx, key, refreshToken, 7*24*time.Hour).Err()
 	if err != nil {
 		return nil, errors.New("failed to store refresh token")
 	}
+
+	sessionSetKey := fmt.Sprintf("user_sessions:%d", user.ID)
+	err = s.Redis.SAdd(ctx, sessionSetKey, sessionID).Err()
+	if err != nil {
+		return nil, errors.New("failed to register session")
+	}
+
+	s.Redis.Expire(ctx, sessionSetKey, 7*24*time.Hour+time.Hour)
 
 	user.Password = ""
 
@@ -168,14 +191,39 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 	return &LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		SessionID:    sessionID,
 		User:         userValid,
 	}, nil
 }
 
-func (s *UserService) Logout(userID int64) error {
+func (s *UserService) Logout(userID int64, sessionID string) error {
 	ctx := context.Background()
-	key := fmt.Sprintf("refresh_token:%d", userID)
-	return s.Redis.Del(ctx, key).Err()
+
+	key := fmt.Sprintf("refresh_token:%d:%s", userID, sessionID)
+	err := s.Redis.Del(ctx, key).Err()
+	if err != nil {
+		return err
+	}
+
+	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	return s.Redis.SRem(ctx, sessionSetKey, sessionID).Err()
+}
+
+func (s *UserService) LogoutAllSessions(userID int64) error {
+	ctx := context.Background()
+
+	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	sessions, err := s.Redis.SMembers(ctx, sessionSetKey).Result()
+	if err != nil {
+		return err
+	}
+
+	for _, sessionID := range sessions {
+		key := fmt.Sprintf("refresh_token:%d:%s", userID, sessionID)
+		s.Redis.Del(ctx, key)
+	}
+
+	return s.Redis.Del(ctx, sessionSetKey).Err()
 }
 
 func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
@@ -185,11 +233,25 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 	}
 
 	userID := claims.UserID
-
 	ctx := context.Background()
-	key := fmt.Sprintf("refresh_token:%d", userID)
-	storedToken, err := s.Redis.Get(ctx, key).Result()
-	if err != nil || storedToken != refreshToken {
+
+	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	sessions, err := s.Redis.SMembers(ctx, sessionSetKey).Result()
+	if err != nil {
+		return "", errors.New("failed to retrieve sessions")
+	}
+
+	var foundSession string
+	for _, sessionID := range sessions {
+		key := fmt.Sprintf("refresh_token:%d:%s", userID, sessionID)
+		storedToken, err := s.Redis.Get(ctx, key).Result()
+		if err == nil && storedToken == refreshToken {
+			foundSession = sessionID
+			break
+		}
+	}
+
+	if foundSession == "" {
 		return "", errors.New("refresh token not found or invalid")
 	}
 
@@ -204,4 +266,10 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 	}
 
 	return auth.GenerateAccessToken(user.ID, user.Name, user.Email, accountType)
+}
+
+func (s *UserService) GetActiveSessions(userID int64) ([]string, error) {
+	ctx := context.Background()
+	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	return s.Redis.SMembers(ctx, sessionSetKey).Result()
 }
