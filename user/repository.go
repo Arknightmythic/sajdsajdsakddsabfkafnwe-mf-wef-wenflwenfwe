@@ -106,13 +106,26 @@ func (r *UserRepository) GetUserByID(id int) (*User, error) {
 }
 
 func (r *UserRepository) UpdateUser(id int, user *User) (*User, error) {
-	query := `
-		UPDATE users SET name=$1, password=$2, account_type=$3, phone=$4, role_id=$5
-		WHERE id=$6
-		RETURNING id, name, email, account_type, phone, role_id;
-	`
+	var query string
+	var args []interface{}
+	if user.Password == "" {
+		query = `
+			UPDATE users SET name=$1, account_type=$2, phone=$3, role_id=$4
+			WHERE id=$5
+			RETURNING id, name, email, account_type, phone, role_id;
+		`
+		args = []interface{}{user.Name, user.AccountType, user.Phone, user.RoleID, id}
+	} else {
+		query = `
+			UPDATE users SET name=$1, password=$2, account_type=$3, phone=$4, role_id=$5
+			WHERE id=$6
+			RETURNING id, name, email, account_type, phone, role_id;
+		`
+		args = []interface{}{user.Name, user.Password, user.AccountType, user.Phone, user.RoleID, id}
+	}
+
 	var updatedUser User
-	err := r.DB.Get(&updatedUser, query, user.Name, user.Password, user.AccountType, user.Phone, user.RoleID, id)
+	err := r.DB.Get(&updatedUser, query, args...)
 	return &updatedUser, err
 }
 
