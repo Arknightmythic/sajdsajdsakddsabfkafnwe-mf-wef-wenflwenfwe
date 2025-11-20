@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -29,7 +28,7 @@ func NewClient(cfg *config.ExternalAPIConfig) *Client {
 }
 
 type ExtractRequest struct {
-	ID       int
+	ID       string
 	Category string
 	Filename string
 	FilePath string
@@ -106,7 +105,7 @@ func (c *Client) ExtractDocument(req ExtractRequest) error {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	if err := writer.WriteField("id", strconv.Itoa(req.ID)); err != nil {
+	if err := writer.WriteField("id", req.ID); err != nil {
 		return fmt.Errorf("failed to write id field: %w", err)
 	}
 
@@ -230,7 +229,7 @@ func (c *Client) SendMessageToAPI(data interface{}) error {
 		Status:  "success",
 		Message: "Message sent successfully",
 		Data:    data,
-	}	
+	}
 
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {

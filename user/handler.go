@@ -187,6 +187,17 @@ func (h *UserHandler) Login(c *gin.Context) {
 		httpOnly,
 	)
 
+	c.SetSameSite(sameSite)
+	c.SetCookie(
+		"session_id",
+		response.SessionID,
+		refreshMaxAge,
+		path,
+		domain,
+		secure,
+		httpOnly,
+	)
+
 	util.SuccessResponse(c, "Login successful", response)
 }
 
@@ -197,7 +208,13 @@ func (h *UserHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	err := h.Service.Logout(userID.(int64))
+	sessionID, err := c.Cookie("session_id")
+	if err != nil {
+		util.ErrorResponse(c, http.StatusBadRequest, "Session ID not found")
+		return
+	}
+
+	err = h.Service.Logout(userID.(int64), sessionID)
 	if err != nil {
 		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to logout")
 		return
@@ -211,7 +228,56 @@ func (h *UserHandler) Logout(c *gin.Context) {
 	c.SetSameSite(sameSite)
 	c.SetCookie("refresh_token", "", -1, path, domain, secure, httpOnly)
 
+	c.SetSameSite(sameSite)
+	c.SetCookie("session_id", "", -1, path, domain, secure, httpOnly)
+
 	util.SuccessResponse(c, "Logout successful", nil)
+}
+
+func (h *UserHandler) LogoutAllSessions(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		util.ErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	err := h.Service.LogoutAllSessions(userID.(int64))
+	if err != nil {
+		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to logout all sessions")
+		return
+	}
+
+	domain, path, secure, httpOnly, sameSite, _, _ := getCookieSettings()
+
+	c.SetSameSite(sameSite)
+	c.SetCookie("access_token", "", -1, path, domain, secure, httpOnly)
+
+	c.SetSameSite(sameSite)
+	c.SetCookie("refresh_token", "", -1, path, domain, secure, httpOnly)
+
+	c.SetSameSite(sameSite)
+	c.SetCookie("session_id", "", -1, path, domain, secure, httpOnly)
+
+	util.SuccessResponse(c, "All sessions logged out successfully", nil)
+}
+
+func (h *UserHandler) GetActiveSessions(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		util.ErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	sessions, err := h.Service.GetActiveSessions(userID.(int64))
+	if err != nil {
+		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve sessions")
+		return
+	}
+
+	util.SuccessResponse(c, "Active sessions retrieved successfully", gin.H{
+		"sessions": sessions,
+		"count":    len(sessions),
+	})
 }
 
 func (h *UserHandler) RefreshToken(c *gin.Context) {

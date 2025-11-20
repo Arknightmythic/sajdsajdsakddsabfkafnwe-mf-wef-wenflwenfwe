@@ -67,6 +67,9 @@ func RunMigrations(db *sqlx.DB) {
 		context TEXT NULL
 	);
 
+	-- Updated chat_history using schema bkpm
+	CREATE SCHEMA IF NOT EXISTS bkpm;
+
 	CREATE TABLE IF NOT EXISTS chat_history (
 		id SERIAL PRIMARY KEY,
 		session_id UUID NOT NULL,
@@ -78,18 +81,33 @@ func RunMigrations(db *sqlx.DB) {
 		feedback BOOLEAN,
 		question_category TEXT,
 		question_sub_category TEXT,
-		is_answered BOOLEAN
+		is_answered BOOLEAN,
+		revision TEXT
 	);
+
+	-- Add is_validated column if missing
+	DO $$ 
+	BEGIN
+		IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+					   WHERE table_schema='bkpm' AND table_name='chat_history' AND column_name='is_validated') THEN
+			ALTER TABLE bkpm.chat_history ADD COLUMN is_validated BOOLEAN;
+		END IF;
+	END $$;
+
+	CREATE INDEX IF NOT EXISTS idx_chat_history_session_id
+		ON bkpm.chat_history(session_id);
+
+	CREATE INDEX IF NOT EXISTS idx_chat_history_user_id
+		ON bkpm.chat_history(user_id);
+
 
 	CREATE INDEX IF NOT EXISTS idx_document_details_document_id ON document_details(document_id);
 	CREATE INDEX IF NOT EXISTS idx_document_details_is_latest ON document_details(is_latest);
 	CREATE INDEX IF NOT EXISTS idx_document_details_data_type ON document_details(data_type);
 	CREATE INDEX IF NOT EXISTS idx_document_details_status ON document_details(status);
-	CREATE INDEX IF NOT EXISTS idx_chat_history_session_id ON chat_history(session_id);
-	CREATE INDEX IF NOT EXISTS idx_chat_history_user_id ON chat_history(user_id);
 	CREATE INDEX IF NOT EXISTS idx_conversations_platform_unique_id ON conversations(platform_unique_id);
 
-	-- Add name column if it doesn't exist (for existing databases)
+	-- Add name column if missing
 	DO $$ 
 	BEGIN
 		IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
@@ -100,7 +118,7 @@ func RunMigrations(db *sqlx.DB) {
 		END IF;
 	END $$;
 
-	-- Add data_type column if it doesn't exist (for existing databases)
+	-- Add data_type column if missing
 	DO $$ 
 	BEGIN
 		IF NOT EXISTS (SELECT 1 FROM information_schema.columns 

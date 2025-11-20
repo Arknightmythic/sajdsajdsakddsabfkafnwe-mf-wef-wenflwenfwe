@@ -37,20 +37,28 @@ type DocumentWithDetail struct {
 }
 
 type DocumentFilter struct {
-	Search   string
-	DataType string
-	Category string
-	Status   string
-	Limit    int
-	Offset   int
+	Search        string
+	DataType      string
+	Category      string
+	Status        string
+	Limit         int
+	Offset        int
+	SortBy        string
+	SortDirection string
+	StartDate     *time.Time
+	EndDate       *time.Time
 }
 
 type DocumentDetailFilter struct {
-    Search       string
-    DataType     string
-    Category     string
-    Status       string
-    DocumentName string
-    Limit        int
-    Offset       int
+	Search        string
+	DataType      string
+	Category      string
+	Status        string
+	DocumentName  string
+	Limit         int
+	Offset        int
+	SortBy        string
+	SortDirection string
+	StartDate     *time.Time
+	EndDate       *time.Time
 }

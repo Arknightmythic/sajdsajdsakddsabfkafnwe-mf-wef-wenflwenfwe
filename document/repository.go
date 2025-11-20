@@ -43,8 +43,7 @@ func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error 
 
 func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentWithDetail, error) {
 	var documents []DocumentWithDetail
-
-	query := `
+	base := `
 		SELECT 
 			d.id AS id,
 			d.category AS category,
@@ -90,11 +89,46 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 		argIndex++
 	}
 
+	if filter.StartDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		args = append(args, *filter.StartDate)
+		argIndex++
+	}
+	if filter.EndDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		args = append(args, *filter.EndDate)
+		argIndex++
+	}
+
+	query := base
 	if len(conditions) > 0 {
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
 
-	query += " ORDER BY dd.created_at DESC"
+	allowedSort := map[string]bool{"dd.created_at": true, "dd.document_name": true, "dd.staff": true}
+	sortBy := "dd.created_at"
+	if filter.SortBy != "" {
+		
+		sb := filter.SortBy
+		if allowedSort[sb] {
+			sortBy = sb
+		} else if allowedSort["dd."+sb] {
+			sortBy = "dd." + sb
+		}
+	}
+	dir := "DESC"
+	if strings.ToUpper(filter.SortDirection) == "ASC" {
+		dir = "ASC"
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = 10
+	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+
+	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, filter.Limit, filter.Offset)
 
@@ -106,7 +140,7 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 }
 
 func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, error) {
-	query := `
+	base := `
 		SELECT COUNT(*)
 		FROM documents d
 		INNER JOIN document_details dd ON d.id = dd.document_id
@@ -141,6 +175,18 @@ func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, erro
 		argIndex++
 	}
 
+	if filter.StartDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		args = append(args, *filter.StartDate)
+		argIndex++
+	}
+	if filter.EndDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		args = append(args, *filter.EndDate)
+		argIndex++
+	}
+
+	query := base
 	if len(conditions) > 0 {
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
@@ -224,16 +270,15 @@ func (r *DocumentRepository) UpdateDocumentDetailStatus(id int, status string) e
 
 func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) ([]DocumentDetail, error) {
 	var details []DocumentDetail
-
-	query := `
-        SELECT 
-            dd.id, dd.document_id, dd.document_name, dd.filename, dd.data_type, 
-            dd.staff, dd.team, dd.status, dd.is_latest, dd.is_approve, dd.created_at,
-            d.category
-        FROM document_details dd
-        INNER JOIN documents d ON dd.document_id = d.id
-        WHERE 1=1
-    `
+	base := `
+		SELECT 
+			dd.id, dd.document_id, dd.document_name, dd.filename, dd.data_type, 
+			dd.staff, dd.team, dd.status, dd.is_latest, dd.is_approve, dd.created_at,
+			d.category
+		FROM document_details dd
+		INNER JOIN documents d ON dd.document_id = d.id
+		WHERE 1=1
+	`
 
 	var conditions []string
 	var args []interface{}
@@ -269,11 +314,45 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 		argIndex++
 	}
 
+	if filter.StartDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		args = append(args, *filter.StartDate)
+		argIndex++
+	}
+	if filter.EndDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		args = append(args, *filter.EndDate)
+		argIndex++
+	}
+
+	query := base
 	if len(conditions) > 0 {
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
 
-	query += " ORDER BY dd.created_at DESC"
+	allowedSort := map[string]bool{"dd.created_at": true, "dd.document_name": true, "dd.staff": true}
+	sortBy := "dd.created_at"
+	if filter.SortBy != "" {
+		sb := filter.SortBy
+		if allowedSort[sb] {
+			sortBy = sb
+		} else if allowedSort["dd."+sb] {
+			sortBy = "dd." + sb
+		}
+	}
+	dir := "DESC"
+	if strings.ToUpper(filter.SortDirection) == "ASC" {
+		dir = "ASC"
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = 10
+	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+
+	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, filter.Limit, filter.Offset)
 
@@ -285,12 +364,12 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 }
 
 func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter) (int, error) {
-	query := `
-        SELECT COUNT(*)
-        FROM document_details dd
-        INNER JOIN documents d ON dd.document_id = d.id
-        WHERE 1=1
-    `
+	base := `
+		SELECT COUNT(*)
+		FROM document_details dd
+		INNER JOIN documents d ON dd.document_id = d.id
+		WHERE 1=1
+	`
 
 	var conditions []string
 	var args []interface{}
@@ -326,6 +405,18 @@ func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter
 		argIndex++
 	}
 
+	if filter.StartDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		args = append(args, *filter.StartDate)
+		argIndex++
+	}
+	if filter.EndDate != nil {
+		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		args = append(args, *filter.EndDate)
+		argIndex++
+	}
+
+	query := base
 	if len(conditions) > 0 {
 		query += " AND " + strings.Join(conditions, " AND ")
 	}

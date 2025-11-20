@@ -25,6 +25,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 		authGroup.POST("/login", handler.Login)
 		authGroup.POST("/refresh", handler.RefreshToken)
 		authGroup.POST("/logout", middleware.AuthMiddleware(), handler.Logout)
+		authGroup.POST("/logout-all", middleware.AuthMiddleware(), handler.LogoutAllSessions)
+		authGroup.GET("/sessions", middleware.AuthMiddleware(), handler.GetActiveSessions)
 	}
 
 	userGroup := r.Group("/api/users")
