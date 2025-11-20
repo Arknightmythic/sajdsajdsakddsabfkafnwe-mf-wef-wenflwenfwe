@@ -39,6 +39,7 @@ func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
 		QuestionSubCategory *string                `json:"question_sub_category"`
 		IsAnswered          *bool                  `json:"is_answered"`
 		Revision            *int                   `json:"revision"`
+		IsValidated         *bool                  `json:"is_validated"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -63,6 +64,7 @@ func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
 		QuestionSubCategory: req.QuestionSubCategory,
 		IsAnswered:          req.IsAnswered,
 		Revision:            req.Revision,
+		IsValidated:         req.IsValidated,
 	}
 
 	if err := h.service.CreateChatHistory(history); err != nil {
@@ -104,6 +106,8 @@ func (h *ChatHandler) GetChatHistories(ctx *gin.Context) {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	
 
 	util.SuccessResponse(ctx, "Chat histories retrieved successfully", result)
 }
@@ -182,6 +186,7 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 		QuestionSubCategory *string                `json:"question_sub_category"`
 		IsAnswered          *bool                  `json:"is_answered"`
 		Revision            *int                   `json:"revision"`
+		IsValidated         *bool                  `json:"is_validated"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -200,6 +205,7 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 		QuestionSubCategory: req.QuestionSubCategory,
 		IsAnswered:          req.IsAnswered,
 		Revision:            req.Revision,
+		IsValidated:         req.IsValidated,
 	}
 
 	if err := h.service.UpdateChatHistory(history); err != nil {

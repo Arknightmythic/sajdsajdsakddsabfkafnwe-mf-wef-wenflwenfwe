@@ -85,6 +85,15 @@ func RunMigrations(db *sqlx.DB) {
 		revision TEXT
 	);
 
+	-- Add is_validated column if missing
+	DO $$ 
+	BEGIN
+		IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+					   WHERE table_schema='bkpm' AND table_name='chat_history' AND column_name='is_validated') THEN
+			ALTER TABLE bkpm.chat_history ADD COLUMN is_validated BOOLEAN;
+		END IF;
+	END $$;
+
 	CREATE INDEX IF NOT EXISTS idx_chat_history_session_id
 		ON bkpm.chat_history(session_id);
 

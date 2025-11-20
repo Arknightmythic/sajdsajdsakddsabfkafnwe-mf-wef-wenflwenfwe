@@ -18,11 +18,12 @@ func NewChatRepository(db *sqlx.DB) *ChatRepository {
 
 func (r *ChatRepository) CreateChatHistory(history *ChatHistory) error {
 	query := `
-		INSERT INTO chat_history
-		(session_id, message, user_id, is_cannot_answer, category, feedback, question_category, question_sub_category, is_answered, revision)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, created_at
-	`
+		       INSERT INTO chat_history
+		       (session_id, message, user_id, is_cannot_answer, category, feedback, question_category, question_sub_category, is_answered, revision, is_validated)
+		       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		       RETURNING id, created_at
+	       `
+	// Always insert NULL for is_validated
 	return r.db.QueryRow(
 		query,
 		history.SessionID,
@@ -35,6 +36,7 @@ func (r *ChatRepository) CreateChatHistory(history *ChatHistory) error {
 		history.QuestionSubCategory,
 		history.IsAnswered,
 		history.Revision,
+		nil, // is_validated is always NULL on insert
 	).Scan(&history.ID, &history.CreatedAt)
 }
 
@@ -84,11 +86,11 @@ func (r *ChatRepository) GetAllChatHistory(filter ChatHistoryFilter) ([]ChatHist
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-			   category, feedback, question_category, question_sub_category, is_answered, revision
-		FROM chat_history %s
-		ORDER BY %s %s
-		LIMIT $%d OFFSET $%d
+		 SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			 category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
+		 FROM chat_history %s
+		 ORDER BY %s %s
+		 LIMIT $%d OFFSET $%d
 	`, where, sortBy, sortDirection, argIdx, argIdx+1)
 
 	args = append(args, filter.Limit, filter.Offset)
@@ -104,10 +106,10 @@ func (r *ChatRepository) GetAllChatHistory(filter ChatHistoryFilter) ([]ChatHist
 func (r *ChatRepository) GetChatHistoryByID(id int) (*ChatHistory, error) {
 	var history ChatHistory
 	query := `
-		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-			   category, feedback, question_category, question_sub_category, is_answered, revision
-		FROM chat_history
-		WHERE id = $1
+		 SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			 category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
+		 FROM chat_history
+		 WHERE id = $1
 	`
 	err := r.db.Get(&history, query, id)
 	if err != nil {
@@ -163,12 +165,12 @@ func (r *ChatRepository) GetChatHistoryBySessionID(sessionID uuid.UUID, filter C
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-			   category, feedback, question_category, question_sub_category, is_answered, revision
-		FROM chat_history
-		%s
-		ORDER BY %s %s
-		LIMIT $%d OFFSET $%d
+		 SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			 category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
+		 FROM chat_history
+		 %s
+		 ORDER BY %s %s
+		 LIMIT $%d OFFSET $%d
 	`, where, sortBy, sortDirection, argIdx, argIdx+1)
 
 	args = append(args, filter.Limit, filter.Offset)
@@ -308,11 +310,11 @@ func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error
 
 	var histories []ChatHistory
 	historyQuery := `
-		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-			   category, feedback, question_category, question_sub_category, is_answered, revision
-		FROM chat_history
-		WHERE session_id = $1
-		ORDER BY created_at ASC
+		 SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			 category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
+		 FROM chat_history
+		 WHERE session_id = $1
+		 ORDER BY created_at ASC
 	`
 	err = r.db.Select(&histories, historyQuery, conv.ID)
 	if err == nil {
@@ -409,12 +411,12 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 	order := "ORDER BY session_id, created_at ASC"
 
 	query := fmt.Sprintf(`
-			SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-				   category, feedback, question_category, question_sub_category, is_answered, revision
-			FROM chat_history
-			%s
-			%s
-		`, where, order)
+			  SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+				  category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
+			  FROM chat_history
+			  %s
+			  %s
+		 `, where, order)
 
 	if err := r.db.Select(&histories, query, args...); err != nil {
 		return nil, 0, err

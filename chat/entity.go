@@ -35,6 +35,7 @@ type ChatHistory struct {
 	QuestionSubCategory *string   `db:"question_sub_category" json:"question_sub_category,omitempty"`
 	IsAnswered          *bool     `db:"is_answered" json:"is_answered,omitempty"`
 	Revision            *int      `db:"revision" json:"revision,omitempty"`
+	IsValidated         *bool     `db:"is_validated" json:"is_validated"`
 }
 
 type ResponseAsk struct {

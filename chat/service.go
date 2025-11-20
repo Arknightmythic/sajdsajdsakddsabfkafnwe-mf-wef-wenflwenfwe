@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"log"
 	"math"
 
 	"github.com/google/uuid"
@@ -27,6 +28,8 @@ func (s *ChatService) GetAllChatHistory(filter ChatHistoryFilter) (*ChatHistoryW
 	if err != nil {
 		return nil, err
 	}
+
+	log.Println(histories[0].IsValidated)
 
 	totalPages := int(math.Ceil(float64(total) / float64(filter.Limit)))
 
@@ -159,6 +162,6 @@ func (s *ChatService) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatH
 	}, nil
 }
 
-func (s *ChatService) UpdateIsAnsweredStatus(questionID, answerID int,  revision string, isAnswered bool) error {
+func (s *ChatService) UpdateIsAnsweredStatus(questionID, answerID int, revision string, isAnswered bool) error {
 	return s.repo.UpdateIsAnsweredStatus(questionID, answerID, revision, isAnswered)
 }
