@@ -38,7 +38,7 @@ func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
 		QuestionCategory    *string                `json:"question_category"`
 		QuestionSubCategory *string                `json:"question_sub_category"`
 		IsAnswered          *bool                  `json:"is_answered"`
-		Revision            *int                   `json:"revision"`
+		Revision            *string                   `json:"revision"`
 		IsValidated         *bool                  `json:"is_validated"`
 	}
 
@@ -183,7 +183,7 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 		QuestionCategory    *string                `json:"question_category"`
 		QuestionSubCategory *string                `json:"question_sub_category"`
 		IsAnswered          *bool                  `json:"is_answered"`
-		Revision            *int                   `json:"revision"`
+		Revision            *string                 `json:"revision"`
 		IsValidated         *bool                  `json:"is_validated"`
 	}
 

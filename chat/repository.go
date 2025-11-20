@@ -23,7 +23,7 @@ func (r *ChatRepository) CreateChatHistory(history *ChatHistory) error {
 		       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		       RETURNING id, created_at
 	       `
-	// Always insert NULL for is_validated
+	
 	return r.db.QueryRow(
 		query,
 		history.SessionID,
@@ -36,7 +36,7 @@ func (r *ChatRepository) CreateChatHistory(history *ChatHistory) error {
 		history.QuestionSubCategory,
 		history.IsAnswered,
 		history.Revision,
-		nil, // is_validated is always NULL on insert
+		nil, 
 	).Scan(&history.ID, &history.CreatedAt)
 }
 
@@ -408,6 +408,8 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
+	
+	
 	order := "ORDER BY session_id, created_at ASC"
 
 	query := fmt.Sprintf(`
@@ -446,10 +448,20 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 				QuestionCategory: histories[i].QuestionCategory,
 				Feedback:         histories[i+1].Feedback,
 				IsCannotAnswer:   histories[i+1].IsCannotAnswer,
+				Revision:         histories[i+1].Revision,
 				SessionID:        histories[i].SessionID,
 			})
 		}
 	}
+
+	
+	
+	if strings.ToUpper(filter.SortDirection) == "DESC" {
+		for i, j := 0, len(pairs)-1; i < j; i, j = i+1, j-1 {
+			pairs[i], pairs[j] = pairs[j], pairs[i]
+		}
+	}
+	
 
 	total := len(pairs)
 

@@ -34,7 +34,7 @@ type ChatHistory struct {
 	QuestionCategory    *string   `db:"question_category" json:"question_category,omitempty"`
 	QuestionSubCategory *string   `db:"question_sub_category" json:"question_sub_category,omitempty"`
 	IsAnswered          *bool     `db:"is_answered" json:"is_answered,omitempty"`
-	Revision            *int      `db:"revision" json:"revision,omitempty"`
+	Revision            *string      `db:"revision" json:"revision,omitempty"`
 	IsValidated         *bool     `db:"is_validated" json:"is_validated"`
 }
 
@@ -64,6 +64,7 @@ type ChatPair struct {
 	QuestionCategory *string   `json:"question_category,omitempty"`
 	Feedback         *bool     `json:"feedback,omitempty"`
 	IsCannotAnswer   *bool     `json:"is_cannot_answer,omitempty"`
+	Revision         *string   `json:"revision,omitempty"`
 	SessionID        uuid.UUID `json:"session_id"`
 }
 
