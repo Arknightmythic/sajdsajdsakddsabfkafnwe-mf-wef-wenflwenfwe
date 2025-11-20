@@ -33,6 +33,8 @@ type ChatHistory struct {
 	Feedback            *bool     `db:"feedback" json:"feedback,omitempty"`
 	QuestionCategory    *string   `db:"question_category" json:"question_category,omitempty"`
 	QuestionSubCategory *string   `db:"question_sub_category" json:"question_sub_category,omitempty"`
+	IsAnswered          *bool     `db:"is_answered" json:"is_answered,omitempty"`
+	Revision            *int      `db:"revision" json:"revision,omitempty"`
 }
 
 type ResponseAsk struct {
@@ -43,7 +45,7 @@ type ResponseAsk struct {
 	Category         string   `json:"category"`
 	QuestionCategory []string `json:"question_category"`
 	Answer           string   `json:"answer"`
-	Citations        []string `json:"citations"` 
+	Citations        []string `json:"citations"`
 	IsHelpdesk       bool     `json:"is_helpdesk"`
 	IsAnswered       *bool    `json:"is_answered"`
 	Platform         string   `json:"platform"`
@@ -97,4 +99,22 @@ type ChatHistoryWithPagination struct {
 	Page       int           `json:"page"`
 	PageSize   int           `json:"page_size"`
 	TotalPages int           `json:"total_pages"`
+}
+
+type ChatHistoryFilter struct {
+	SortBy        string
+	SortDirection string
+	StartDate     *time.Time
+	EndDate       *time.Time
+	Limit         int
+	Offset        int
+}
+
+type ConversationFilter struct {
+	SortBy        string
+	SortDirection string
+	StartDate     *time.Time
+	EndDate       *time.Time
+	Limit         int
+	Offset        int
 }

@@ -37,6 +37,8 @@ func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
 		Feedback            *bool                  `json:"feedback"`
 		QuestionCategory    *string                `json:"question_category"`
 		QuestionSubCategory *string                `json:"question_sub_category"`
+		IsAnswered          *bool                  `json:"is_answered"`
+		Revision            *int                   `json:"revision"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -59,6 +61,8 @@ func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
 		Feedback:            req.Feedback,
 		QuestionCategory:    req.QuestionCategory,
 		QuestionSubCategory: req.QuestionSubCategory,
+		IsAnswered:          req.IsAnswered,
+		Revision:            req.Revision,
 	}
 
 	if err := h.service.CreateChatHistory(history); err != nil {
@@ -73,7 +77,29 @@ func (h *ChatHandler) GetChatHistories(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 
-	result, err := h.service.GetAllChatHistory(page, pageSize)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		return
+	}
+
+	filter := ChatHistoryFilter{
+		SortBy:        ctx.Query("sort_by"),
+		SortDirection: ctx.Query("sort_direction"),
+		StartDate:     startDatePtr,
+		EndDate:       endDatePtr,
+		Limit:         pageSize,
+		Offset:        (page - 1) * pageSize,
+	}
+
+	result, err := h.service.GetAllChatHistory(filter)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -108,7 +134,29 @@ func (h *ChatHandler) GetChatHistoryBySessionID(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 
-	result, err := h.service.GetChatHistoryBySessionID(sessionID, page, pageSize)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		return
+	}
+
+	filter := ChatHistoryFilter{
+		SortBy:        ctx.Query("sort_by"),
+		SortDirection: ctx.Query("sort_direction"),
+		StartDate:     startDatePtr,
+		EndDate:       endDatePtr,
+		Limit:         pageSize,
+		Offset:        (page - 1) * pageSize,
+	}
+
+	result, err := h.service.GetChatHistoryBySessionID(sessionID, filter)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -132,6 +180,8 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 		Feedback            *bool                  `json:"feedback"`
 		QuestionCategory    *string                `json:"question_category"`
 		QuestionSubCategory *string                `json:"question_sub_category"`
+		IsAnswered          *bool                  `json:"is_answered"`
+		Revision            *int                   `json:"revision"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -148,6 +198,8 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 		Feedback:            req.Feedback,
 		QuestionCategory:    req.QuestionCategory,
 		QuestionSubCategory: req.QuestionSubCategory,
+		IsAnswered:          req.IsAnswered,
+		Revision:            req.Revision,
 	}
 
 	if err := h.service.UpdateChatHistory(history); err != nil {
@@ -207,7 +259,29 @@ func (h *ChatHandler) GetConversations(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 
-	result, err := h.service.GetAllConversations(page, pageSize)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		return
+	}
+
+	filter := ConversationFilter{
+		SortBy:        ctx.Query("sort_by"),
+		SortDirection: ctx.Query("sort_direction"),
+		StartDate:     startDatePtr,
+		EndDate:       endDatePtr,
+		Limit:         pageSize,
+		Offset:        (page - 1) * pageSize,
+	}
+
+	result, err := h.service.GetAllConversations(filter)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -371,7 +445,29 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 
-	result, err := h.service.GetChatPairsBySessionID(sessionID, page, pageSize)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		return
+	}
+
+	filter := ChatHistoryFilter{
+		SortBy:        ctx.Query("sort_by"),
+		SortDirection: ctx.Query("sort_direction"),
+		StartDate:     startDatePtr,
+		EndDate:       endDatePtr,
+		Limit:         pageSize,
+		Offset:        (page - 1) * pageSize,
+	}
+
+	result, err := h.service.GetChatPairsBySessionID(sessionID, filter)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -390,8 +486,8 @@ func (h *ChatHandler) DebugChatHistory(ctx *gin.Context) {
 	var histories []ChatHistory
 	query := `
 		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-		       category, feedback, question_category, question_sub_category
-		FROM chat_history
+			   category, feedback, question_category, question_sub_category, is_answered, revision
+		FROM bkpm.chat_history
 		WHERE session_id = $1
 		ORDER BY created_at ASC
 	`
@@ -420,6 +516,7 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		Question   string `json:"question" binding:"required"`
 		AnswerID   int    `json:"answer_id" binding:"required"`
 		Answer     string `json:"answer" binding:"required"`
+		Revision   string `json:"revision" binding:"required"`
 		Validate   bool   `json:"validate" binding:"required"`
 	}
 
@@ -428,18 +525,17 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateIsAnsweredStatus(req.QuestionID, req.AnswerID, req.Validate); err != nil {
+	if err := h.service.UpdateIsAnsweredStatus(req.QuestionID, req.AnswerID, req.Revision, req.Validate); err != nil {
 		log.Println("Error updating is_answered status:", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to update validation status")
 		return
 	}
 
 	if req.Validate {
-
 		tempFileName := fmt.Sprintf("qa_%d_%d.txt", req.QuestionID, req.AnswerID)
 		tempFilePath := filepath.Join(os.TempDir(), tempFileName)
 
-		content := fmt.Sprintf("Q:%s\nA:%s", req.Question, req.Answer)
+		content := fmt.Sprintf("Q:%s\nA:%s", req.Question, req.Revision)
 		if err := os.WriteFile(tempFilePath, []byte(content), 0644); err != nil {
 			log.Println("Error creating temp file:", err)
 			util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create temporary file")
@@ -447,8 +543,8 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		}
 
 		extractReq := external.ExtractRequest{
-			ID:       req.QuestionID,
-			Category: "validated_qa",
+			ID:       "faq-" + strconv.Itoa(req.AnswerID),
+			Category: "faq",
 			Filename: tempFileName,
 			FilePath: tempFilePath,
 		}
@@ -463,7 +559,6 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 
 		if err := os.Remove(tempFilePath); err != nil {
 			log.Println("Warning: Failed to delete temp file:", err)
-
 		}
 	}
 
@@ -472,4 +567,36 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		"answer_id":   req.AnswerID,
 		"validate":    req.Validate,
 	})
+}
+
+func parseDate(s string) (time.Time, error) {
+	layouts := []string{time.RFC3339, "2006-01-02"}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid date format: %s", s)
+}
+
+func parseDateRange(startDateStr, endDateStr string) (*time.Time, *time.Time, error) {
+	var startDatePtr, endDatePtr *time.Time
+
+	if startDateStr != "" {
+		t, err := parseDate(startDateStr)
+		if err != nil {
+			return nil, nil, err
+		}
+		startDatePtr = &t
+	}
+
+	if endDateStr != "" {
+		t, err := parseDate(endDateStr)
+		if err != nil {
+			return nil, nil, err
+		}
+		endDatePtr = &t
+	}
+
+	return startDatePtr, endDatePtr, nil
 }

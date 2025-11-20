@@ -149,7 +149,7 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 	}
 
 	extractReq := external.ExtractRequest{
-		ID:       detail.DocumentID,
+		ID:       strconv.Itoa(detail.DocumentID),
 		Category: document.Category,
 		Filename: detail.DocumentName,
 		FilePath: filePath,
@@ -448,7 +448,7 @@ func (s *DocumentService) processFileDataWithExtraction(
 
 	if autoApprove {
 		extractReq := external.ExtractRequest{
-			ID:       document.ID,
+			ID:       strconv.Itoa(document.ID),
 			Category: category,
 			Filename: originalFilename,
 			FilePath: filePath,

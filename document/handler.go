@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -270,13 +271,29 @@ func (h *DocumentHandler) GetDocuments(ctx *gin.Context) {
 		offset = 0
 	}
 
+	var startDatePtr, endDatePtr *time.Time
+	if sd := ctx.Query("start_date"); sd != "" {
+		if t, err := parseDate(sd); err == nil {
+			startDatePtr = &t
+		}
+	}
+	if ed := ctx.Query("end_date"); ed != "" {
+		if t, err := parseDate(ed); err == nil {
+			endDatePtr = &t
+		}
+	}
+
 	filter := DocumentFilter{
-		Search:   ctx.Query("search"),
-		DataType: ctx.Query("data_type"),
-		Category: ctx.Query("category"),
-		Status:   ctx.Query("status"),
-		Limit:    limit,
-		Offset:   offset,
+		Search:        ctx.Query("search"),
+		DataType:      ctx.Query("data_type"),
+		Category:      ctx.Query("category"),
+		Status:        ctx.Query("status"),
+		Limit:         limit,
+		Offset:        offset,
+		SortBy:        ctx.Query("sort_by"),
+		SortDirection: ctx.Query("sort_direction"),
+		StartDate:     startDatePtr,
+		EndDate:       endDatePtr,
 	}
 
 	documents, total, err := h.service.GetAllDocuments(filter)
@@ -489,14 +506,30 @@ func (h *DocumentHandler) GetAllDocumentDetails(ctx *gin.Context) {
 		offset = 0
 	}
 
+	var startDatePtr, endDatePtr *time.Time
+	if sd := ctx.Query("start_date"); sd != "" {
+		if t, err := parseDate(sd); err == nil {
+			startDatePtr = &t
+		}
+	}
+	if ed := ctx.Query("end_date"); ed != "" {
+		if t, err := parseDate(ed); err == nil {
+			endDatePtr = &t
+		}
+	}
+
 	filter := DocumentDetailFilter{
-		Search:       ctx.Query("search"),
-		DataType:     ctx.Query("data_type"),
-		Category:     ctx.Query("category"),
-		Status:       ctx.Query("status"),
-		DocumentName: ctx.Query("document_name"),
-		Limit:        limit,
-		Offset:       offset,
+		Search:        ctx.Query("search"),
+		DataType:      ctx.Query("data_type"),
+		Category:      ctx.Query("category"),
+		Status:        ctx.Query("status"),
+		DocumentName:  ctx.Query("document_name"),
+		Limit:         limit,
+		Offset:        offset,
+		SortBy:        ctx.Query("sort_by"),
+		SortDirection: ctx.Query("sort_direction"),
+		StartDate:     startDatePtr,
+		EndDate:       endDatePtr,
 	}
 
 	details, total, err := h.service.GetAllDocumentDetails(filter)
@@ -599,4 +632,14 @@ func (h *DocumentHandler) GetBatchUploadStatus(ctx *gin.Context) {
 	}
 
 	util.SuccessResponse(ctx, "Batch status retrieved successfully", status)
+}
+
+func parseDate(s string) (time.Time, error) {
+	layouts := []string{time.RFC3339, "2006-01-02"}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid date format: %s", s)
 }

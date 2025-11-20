@@ -18,26 +18,28 @@ func (s *ChatService) CreateChatHistory(history *ChatHistory) error {
 	return s.repo.CreateChatHistory(history)
 }
 
-func (s *ChatService) GetAllChatHistory(page, pageSize int) (*ChatHistoryWithPagination, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
+func (s *ChatService) GetAllChatHistory(filter ChatHistoryFilter) (*ChatHistoryWithPagination, error) {
+	if filter.Limit < 1 {
+		filter.Limit = 10
 	}
 
-	histories, total, err := s.repo.GetAllChatHistory(page, pageSize)
+	histories, total, err := s.repo.GetAllChatHistory(filter)
 	if err != nil {
 		return nil, err
 	}
 
-	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+	totalPages := int(math.Ceil(float64(total) / float64(filter.Limit)))
+
+	page := 1
+	if filter.Limit > 0 {
+		page = (filter.Offset / filter.Limit) + 1
+	}
 
 	return &ChatHistoryWithPagination{
 		Data:       histories,
 		Total:      total,
 		Page:       page,
-		PageSize:   pageSize,
+		PageSize:   filter.Limit,
 		TotalPages: totalPages,
 	}, nil
 }
@@ -46,26 +48,28 @@ func (s *ChatService) GetChatHistoryByID(id int) (*ChatHistory, error) {
 	return s.repo.GetChatHistoryByID(id)
 }
 
-func (s *ChatService) GetChatHistoryBySessionID(sessionID uuid.UUID, page, pageSize int) (*ChatHistoryWithPagination, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
+func (s *ChatService) GetChatHistoryBySessionID(sessionID uuid.UUID, filter ChatHistoryFilter) (*ChatHistoryWithPagination, error) {
+	if filter.Limit < 1 {
+		filter.Limit = 10
 	}
 
-	histories, total, err := s.repo.GetChatHistoryBySessionID(sessionID, page, pageSize)
+	histories, total, err := s.repo.GetChatHistoryBySessionID(sessionID, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+	totalPages := int(math.Ceil(float64(total) / float64(filter.Limit)))
+
+	page := 1
+	if filter.Limit > 0 {
+		page = (filter.Offset / filter.Limit) + 1
+	}
 
 	return &ChatHistoryWithPagination{
 		Data:       histories,
 		Total:      total,
 		Page:       page,
-		PageSize:   pageSize,
+		PageSize:   filter.Limit,
 		TotalPages: totalPages,
 	}, nil
 }
@@ -82,26 +86,28 @@ func (s *ChatService) CreateConversation(conv *Conversation) error {
 	return s.repo.CreateConversation(conv)
 }
 
-func (s *ChatService) GetAllConversations(page, pageSize int) (*ConversationWithPagination, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
+func (s *ChatService) GetAllConversations(filter ConversationFilter) (*ConversationWithPagination, error) {
+	if filter.Limit < 1 {
+		filter.Limit = 10
 	}
 
-	conversations, total, err := s.repo.GetAllConversations(page, pageSize)
+	conversations, total, err := s.repo.GetAllConversations(filter)
 	if err != nil {
 		return nil, err
 	}
 
-	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+	totalPages := int(math.Ceil(float64(total) / float64(filter.Limit)))
+
+	page := 1
+	if filter.Limit > 0 {
+		page = (filter.Offset / filter.Limit) + 1
+	}
 
 	return &ConversationWithPagination{
 		Data:       conversations,
 		Total:      total,
 		Page:       page,
-		PageSize:   pageSize,
+		PageSize:   filter.Limit,
 		TotalPages: totalPages,
 	}, nil
 }
@@ -127,30 +133,32 @@ func (s *ChatService) GetOrCreateConversation(platform, platformUniqueID string)
 	return conv, nil
 }
 
-func (s *ChatService) GetChatPairsBySessionID(sessionID *uuid.UUID, page, pageSize int) (*ChatPairsWithPagination, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
+func (s *ChatService) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatHistoryFilter) (*ChatPairsWithPagination, error) {
+	if filter.Limit < 1 {
+		filter.Limit = 10
 	}
 
-	pairs, total, err := s.repo.GetChatPairsBySessionID(sessionID, page, pageSize)
+	pairs, total, err := s.repo.GetChatPairsBySessionID(sessionID, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+	totalPages := int(math.Ceil(float64(total) / float64(filter.Limit)))
+
+	page := 1
+	if filter.Limit > 0 {
+		page = (filter.Offset / filter.Limit) + 1
+	}
 
 	return &ChatPairsWithPagination{
 		Data:       pairs,
 		Total:      total,
 		Page:       page,
-		PageSize:   pageSize,
+		PageSize:   filter.Limit,
 		TotalPages: totalPages,
 	}, nil
 }
 
-func (s *ChatService) UpdateIsAnsweredStatus(questionID, answerID int, isAnswered bool) error {
-	return s.repo.UpdateIsAnsweredStatus(questionID, answerID, isAnswered)
+func (s *ChatService) UpdateIsAnsweredStatus(questionID, answerID int,  revision string, isAnswered bool) error {
+	return s.repo.UpdateIsAnsweredStatus(questionID, answerID, revision, isAnswered)
 }
