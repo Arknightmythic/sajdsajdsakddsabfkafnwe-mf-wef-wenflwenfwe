@@ -107,8 +107,6 @@ func (h *ChatHandler) GetChatHistories(ctx *gin.Context) {
 		return
 	}
 
-	
-
 	util.SuccessResponse(ctx, "Chat histories retrieved successfully", result)
 }
 
@@ -531,6 +529,10 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		return
 	}
 
+	if req.Revision == "" {
+		req.Revision = req.Answer
+	}
+
 	if err := h.service.UpdateIsAnsweredStatus(req.QuestionID, req.AnswerID, req.Revision, req.Validate); err != nil {
 		log.Println("Error updating is_answered status:", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to update validation status")
@@ -541,7 +543,7 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		tempFileName := fmt.Sprintf("qa_%d_%d.txt", req.QuestionID, req.AnswerID)
 		tempFilePath := filepath.Join(os.TempDir(), tempFileName)
 
-		content := fmt.Sprintf("Q:%s\nA:%s", req.Question, req.Revision)
+		content := fmt.Sprintf("Q:%s\nA:%s", req.Question, "")
 		if err := os.WriteFile(tempFilePath, []byte(content), 0644); err != nil {
 			log.Println("Error creating temp file:", err)
 			util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create temporary file")

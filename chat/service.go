@@ -162,6 +162,6 @@ func (s *ChatService) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatH
 	}, nil
 }
 
-func (s *ChatService) UpdateIsAnsweredStatus(questionID, answerID int, revision string, isAnswered bool) error {
-	return s.repo.UpdateIsAnsweredStatus(questionID, answerID, revision, isAnswered)
+func (s *ChatService) UpdateIsAnsweredStatus(questionID, answerID int, revision string, isValidated bool) error {
+	return s.repo.UpdateIsAnsweredStatus(questionID, answerID, revision, isValidated)
 }
