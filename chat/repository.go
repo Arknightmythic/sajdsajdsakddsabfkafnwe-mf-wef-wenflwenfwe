@@ -3,7 +3,7 @@ package chat
 import (
 	"fmt"
 	"strings"
-
+	"sort"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
@@ -379,6 +379,115 @@ func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniq
 	return &conv, nil
 }
 
+// func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]ChatPair, int, error) {
+// 	var histories []ChatHistory
+// 	var conditions []string
+// 	var args []interface{}
+// 	argIdx := 1
+
+// 	if sessionID != nil {
+// 		conditions = append(conditions, fmt.Sprintf("session_id = $%d", argIdx))
+// 		args = append(args, *sessionID)
+// 		argIdx++
+// 	}
+
+// 	if filter.StartDate != nil {
+// 		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argIdx))
+// 		args = append(args, *filter.StartDate)
+// 		argIdx++
+// 	}
+
+// 	if filter.EndDate != nil {
+// 		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", argIdx))
+// 		args = append(args, *filter.EndDate)
+// 		argIdx++
+// 	}
+
+// 	where := ""
+// 	if len(conditions) > 0 {
+// 		where = "WHERE " + strings.Join(conditions, " AND ")
+// 	}
+
+	
+	
+// 	order := "ORDER BY session_id, created_at ASC"
+
+// 	query := fmt.Sprintf(`
+// 			  SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+// 				  category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
+// 			  FROM chat_history
+// 			  %s
+// 			  %s
+// 		 `, where, order)
+
+// 	if err := r.db.Select(&histories, query, args...); err != nil {
+// 		return nil, 0, err
+// 	}
+
+// 	var pairs []ChatPair
+// 	for i := 0; i < len(histories); i += 2 {
+// 		if i+1 >= len(histories) {
+// 			break
+// 		}
+
+// 		userRole := getMessageRole(histories[i].Message)
+// 		assistantRole := getMessageRole(histories[i+1].Message)
+
+// 		if userRole == "user" && assistantRole == "assistant" {
+// 			questionContent := extractContent(histories[i].Message)
+// 			answerContent := extractContent(histories[i+1].Message)
+
+// 			pairs = append(pairs, ChatPair{
+// 				QuestionID:       histories[i].ID,
+// 				QuestionContent:  questionContent,
+// 				QuestionTime:     histories[i].CreatedAt,
+// 				AnswerID:         histories[i+1].ID,
+// 				AnswerContent:    answerContent,
+// 				AnswerTime:       histories[i+1].CreatedAt,
+// 				Category:         histories[i].Category,
+// 				QuestionCategory: histories[i].QuestionCategory,
+// 				Feedback:         histories[i+1].Feedback,
+// 				IsCannotAnswer:   histories[i+1].IsCannotAnswer,
+// 				Revision:         histories[i+1].Revision,
+// 				SessionID:        histories[i].SessionID,
+// 			})
+// 		}
+// 	}
+
+	
+	
+// 	if strings.ToUpper(filter.SortDirection) == "DESC" {
+// 		for i, j := 0, len(pairs)-1; i < j; i, j = i+1, j-1 {
+// 			pairs[i], pairs[j] = pairs[j], pairs[i]
+// 		}
+// 	}
+	
+
+// 	total := len(pairs)
+
+// 	if filter.Limit <= 0 {
+// 		filter.Limit = 10
+// 	}
+// 	if filter.Offset < 0 {
+// 		filter.Offset = 0
+// 	}
+
+// 	offset := filter.Offset
+// 	end := offset + filter.Limit
+
+// 	if offset >= total {
+// 		return []ChatPair{}, total, nil
+// 	}
+
+// 	if end > total {
+// 		end = total
+// 	}
+
+// 	return pairs[offset:end], total, nil
+// }
+
+// ... import
+
 func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]ChatPair, int, error) {
 	var histories []ChatHistory
 	var conditions []string
@@ -408,8 +517,9 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	
-	
+	// HAPUS LIMIT & OFFSET DARI SQL
+	// Kita harus mengambil semua data dulu untuk membentuk Pair yang utuh
+	// Sorting SQL tetap berdasarkan session_id agar pair (Q & A) tetap bersebelahan
 	order := "ORDER BY session_id, created_at ASC"
 
 	query := fmt.Sprintf(`
@@ -433,11 +543,12 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 		userRole := getMessageRole(histories[i].Message)
 		assistantRole := getMessageRole(histories[i+1].Message)
 
-		if userRole == "user" && assistantRole == "assistant" {
+		// Pastikan urutannya User (Tanya) -> Assistant (Jawab) dalam session yang sama
+		if userRole == "user" && assistantRole == "assistant" && histories[i].SessionID == histories[i+1].SessionID {
 			questionContent := extractContent(histories[i].Message)
 			answerContent := extractContent(histories[i+1].Message)
 
-			pairs = append(pairs, ChatPair{
+			pair := ChatPair{
 				QuestionID:       histories[i].ID,
 				QuestionContent:  questionContent,
 				QuestionTime:     histories[i].CreatedAt,
@@ -450,19 +561,64 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 				IsCannotAnswer:   histories[i+1].IsCannotAnswer,
 				Revision:         histories[i+1].Revision,
 				SessionID:        histories[i].SessionID,
-			})
+				IsValidated:      histories[i+1].IsValidated,
+				IsAnswered:       histories[i+1].IsAnswered,
+				CreatedAt:        histories[i].CreatedAt, // Field untuk sorting
+			}
+
+			// --- FILTERING (IsAnswered & IsValidated) ---
+			// Filter dilakukan di sini karena logic bisnis ada pada Pair
+			
+			// 1. Filter by IsValidated
+			if filter.IsValidated != nil {
+				reqVal := *filter.IsValidated
+				isValidated := pair.IsValidated
+
+				if reqVal == "null" {
+					if isValidated != nil { continue }
+				} else if reqVal == "1" {
+					if isValidated == nil || !*isValidated { continue }
+				} else if reqVal == "0" {
+					if isValidated == nil || *isValidated { continue }
+				}
+			}
+
+			// 2. Filter by IsAnswered
+			if filter.IsAnswered != nil {
+				reqVal := *filter.IsAnswered
+				isAnswered := pair.IsAnswered
+				currentVal := false
+				if isAnswered != nil {
+					currentVal = *isAnswered
+				}
+				if currentVal != reqVal { continue }
+			}
+
+			pairs = append(pairs, pair)
+		} else {
+			// Jika urutan tidak sesuai (misal ada chat yang tidak berpasangan),
+			// mundurkan indeks i satu langkah agar tidak lompat 2
+			// (Opsional, tergantung seberapa rapi data di DB)
+			i-- 
 		}
 	}
 
-	
-	
-	if strings.ToUpper(filter.SortDirection) == "DESC" {
-		for i, j := 0, len(pairs)-1; i < j; i, j = i+1, j-1 {
-			pairs[i], pairs[j] = pairs[j], pairs[i]
-		}
+	// --- SORTING GLOBAL BERDASARKAN TANGGAL ---
+	// Sekarang kita punya list Pair yang bersih, kita sort berdasarkan CreatedAt
+	if strings.ToUpper(filter.SortDirection) == "DESC" || filter.SortDirection == "" {
+		// Latest (Terbaru di atas)
+		sort.SliceStable(pairs, func(i, j int) bool {
+			return pairs[i].CreatedAt.After(pairs[j].CreatedAt)
+		})
+	} else {
+		// Oldest (Terlama di atas)
+		sort.SliceStable(pairs, func(i, j int) bool {
+			return pairs[i].CreatedAt.Before(pairs[j].CreatedAt)
+		})
 	}
-	
 
+	// --- PAGINATION MANUAL ---
+	// Karena kita sorting di Go, kita juga harus paginate di Go
 	total := len(pairs)
 
 	if filter.Limit <= 0 {
@@ -472,18 +628,17 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 		filter.Offset = 0
 	}
 
-	offset := filter.Offset
-	end := offset + filter.Limit
+	start := filter.Offset
+	end := start + filter.Limit
 
-	if offset >= total {
+	if start >= total {
 		return []ChatPair{}, total, nil
 	}
-
 	if end > total {
 		end = total
 	}
 
-	return pairs[offset:end], total, nil
+	return pairs[start:end], total, nil
 }
 
 func extractContent(msg Message) string {

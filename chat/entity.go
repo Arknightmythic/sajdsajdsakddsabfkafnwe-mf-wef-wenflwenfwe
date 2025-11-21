@@ -66,6 +66,9 @@ type ChatPair struct {
 	IsCannotAnswer   *bool     `json:"is_cannot_answer,omitempty"`
 	Revision         *string   `json:"revision,omitempty"`
 	SessionID        uuid.UUID `json:"session_id"`
+	IsValidated      *bool     `json:"is_validated"`
+	IsAnswered       *bool     `json:"is_answered"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type ChatPairsWithPagination struct {
@@ -110,6 +113,8 @@ type ChatHistoryFilter struct {
 	EndDate       *time.Time
 	Limit         int
 	Offset        int
+	IsValidated   *string // Mendukung "null", "0", "1"
+	IsAnswered    *bool
 }
 
 type ConversationFilter struct {
