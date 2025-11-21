@@ -276,6 +276,11 @@ func (h *ChatHandler) GetConversations(ctx *gin.Context) {
 		return
 	}
 
+	var platformUniqueIDPtr *string
+	if val := ctx.Query("platform_unique_id"); val != "" {
+		platformUniqueIDPtr = &val
+	}
+
 	filter := ConversationFilter{
 		SortBy:        ctx.Query("sort_by"),
 		SortDirection: ctx.Query("sort_direction"),
@@ -283,6 +288,7 @@ func (h *ChatHandler) GetConversations(ctx *gin.Context) {
 		EndDate:       endDatePtr,
 		Limit:         pageSize,
 		Offset:        (page - 1) * pageSize,
+		PlatformUniqueID: platformUniqueIDPtr,
 	}
 
 	result, err := h.service.GetAllConversations(filter)

@@ -124,4 +124,5 @@ type ConversationFilter struct {
 	EndDate       *time.Time
 	Limit         int
 	Offset        int
+	PlatformUniqueID *string
 }
