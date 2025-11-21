@@ -240,6 +240,14 @@ func (r *ChatRepository) GetAllConversations(filter ConversationFilter) ([]Conve
 
 	conditions = append(conditions, "platform = 'web'")
 
+	// --- TAMBAHAN: Logic Filter PlatformUniqueID ---
+	if filter.PlatformUniqueID != nil {
+		conditions = append(conditions, fmt.Sprintf("platform_unique_id = $%d", argIdx))
+		args = append(args, *filter.PlatformUniqueID)
+		argIdx++
+	}
+	// -----------------------------------------------
+
 	if filter.StartDate != nil {
 		conditions = append(conditions, fmt.Sprintf("start_timestamp >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
@@ -253,6 +261,7 @@ func (r *ChatRepository) GetAllConversations(filter ConversationFilter) ([]Conve
 
 	where := "WHERE " + strings.Join(conditions, " AND ")
 
+	// Hitung total data untuk pagination
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM conversations %s", where)
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
@@ -277,6 +286,7 @@ func (r *ChatRepository) GetAllConversations(filter ConversationFilter) ([]Conve
 		filter.Offset = 0
 	}
 
+	// Query data utama
 	query := fmt.Sprintf(`
 		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, 
 			   COALESCE(context, '') as context
