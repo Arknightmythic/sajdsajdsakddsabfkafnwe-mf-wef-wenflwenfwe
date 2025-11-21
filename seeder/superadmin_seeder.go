@@ -32,12 +32,13 @@ func superadminSeeder(db *sqlx.DB) {
 		"dashboard",
 		"knowledge-base",
 		"document-management",
-		"chatbot",
-		"validasi",
-		"panduan",
+		"public-service",
+		"validation-history",
+		"guide",
 		"user-management",
 		"team-management",
 		"role-management",
+		"helpdesk",
 	}
 
 	var teamID int

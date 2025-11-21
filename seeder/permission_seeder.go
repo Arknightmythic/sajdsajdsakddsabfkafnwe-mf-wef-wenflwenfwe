@@ -19,7 +19,7 @@ func permissionSeeder(db *sqlx.DB) {
 	}
 
 	permissions := []string{
-		"dashboard:access",
+		"dashboard:read",
 		"dashboard:manager",
 		"dashboard:master",
 		"knowledge-base:create",
@@ -34,7 +34,7 @@ func permissionSeeder(db *sqlx.DB) {
 		"document-management:delete",
 		"document-management:manager",
 		"document-management:master",
-		"public-service:access",
+		"public-service:read",
 		"public-service:manager",
 		"public-service:master",
 		"validation-history:create",
@@ -43,7 +43,7 @@ func permissionSeeder(db *sqlx.DB) {
 		"validation-history:delete",
 		"validation-history:manager",
 		"validation-history:master",
-		"guide:access",
+		"guide:read",
 		"user-management:create",
 		"user-management:read",
 		"user-management:update",
@@ -62,7 +62,7 @@ func permissionSeeder(db *sqlx.DB) {
 		"role-management:delete",
 		"role-management:manager",
 		"role-management:master",
-		"helpdesk:access",
+		"helpdesk:read",
 	}
 
 	tx, err := db.Begin()

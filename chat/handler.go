@@ -38,7 +38,7 @@ func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
 		QuestionCategory    *string                `json:"question_category"`
 		QuestionSubCategory *string                `json:"question_sub_category"`
 		IsAnswered          *bool                  `json:"is_answered"`
-		Revision            *int                   `json:"revision"`
+		Revision            *string                   `json:"revision"`
 		IsValidated         *bool                  `json:"is_validated"`
 	}
 
@@ -183,7 +183,7 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 		QuestionCategory    *string                `json:"question_category"`
 		QuestionSubCategory *string                `json:"question_sub_category"`
 		IsAnswered          *bool                  `json:"is_answered"`
-		Revision            *int                   `json:"revision"`
+		Revision            *string                 `json:"revision"`
 		IsValidated         *bool                  `json:"is_validated"`
 	}
 
@@ -462,6 +462,21 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 		return
 	}
 
+	// Parsing filter is_validated
+	var isValidatedFilter *string
+	if val := ctx.Query("is_validated"); val != "" {
+		if val == "null" || val == "0" || val == "1" {
+			isValidatedFilter = &val
+		}
+	}
+
+	// Parsing filter is_answered
+	var isAnsweredFilter *bool
+	if val := ctx.Query("is_answered"); val != "" {
+		boolVal := val == "true" || val == "1"
+		isAnsweredFilter = &boolVal
+	}
+
 	filter := ChatHistoryFilter{
 		SortBy:        ctx.Query("sort_by"),
 		SortDirection: ctx.Query("sort_direction"),
@@ -469,6 +484,8 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 		EndDate:       endDatePtr,
 		Limit:         pageSize,
 		Offset:        (page - 1) * pageSize,
+		IsValidated:   isValidatedFilter,
+		IsAnswered:    isAnsweredFilter,
 	}
 
 	result, err := h.service.GetChatPairsBySessionID(sessionID, filter)
