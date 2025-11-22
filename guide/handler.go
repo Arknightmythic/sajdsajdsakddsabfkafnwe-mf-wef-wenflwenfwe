@@ -166,7 +166,7 @@ func (h *GuideHandler) GenerateViewURL(c *gin.Context) {
 		return
 	}
 
-	scheme := "http"
+	scheme := "https"
 	if c.Request.TLS != nil {
 		scheme = "https"
 	}
