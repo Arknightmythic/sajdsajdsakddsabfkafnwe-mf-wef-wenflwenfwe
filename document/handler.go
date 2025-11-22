@@ -53,6 +53,37 @@ func (h *DocumentHandler) GenerateViewURL(ctx *gin.Context) {
 	})
 }
 
+func (h *DocumentHandler) GenerateViewURLByID(ctx *gin.Context) {
+	var req struct {
+		ID int `json:"id" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Document ID is required")
+		return
+	}
+
+	
+	token, err := h.service.GenerateViewTokenByID(req.ID)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	
+	scheme := "http"
+	if ctx.Request.TLS != nil {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+	
+	
+	viewURL := fmt.Sprintf("%s/api/documents/view-file?token=%s", baseURL, token)
+
+	util.SuccessResponse(ctx, "View URL generated successfully", gin.H{
+		"url": viewURL,
+	})
+}
+
 func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 	token := ctx.Query("token")
 	if token == "" {

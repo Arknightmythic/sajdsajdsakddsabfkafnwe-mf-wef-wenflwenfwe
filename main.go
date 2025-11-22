@@ -12,6 +12,7 @@ import (
 	"dokuprime-be/seeder"
 	"dokuprime-be/team"
 	"dokuprime-be/user"
+	"dokuprime-be/guide"
 	"log"
 	"net/http"
 	"os"
@@ -61,6 +62,7 @@ func main() {
 	team.RegisterRoutes(r, db)
 	permission.RegisterRoutes(r, db)
 	grafana.RegisterRoutes(r, redisClient)
+	guide.RegisterRoutes(r, db, redisClient)
 	chat.RegisterRoutes(r, db)
 	asyncProcessor := document.RegisterRoutesWithProcessor(r, db, redisClient)
 

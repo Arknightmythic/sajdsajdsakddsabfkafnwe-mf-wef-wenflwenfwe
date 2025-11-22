@@ -67,6 +67,16 @@ func RunMigrations(db *sqlx.DB) {
 		context TEXT NULL
 	);
 
+	CREATE TABLE IF NOT EXISTS guides (
+		id SERIAL PRIMARY KEY,
+		title VARCHAR(255) NOT NULL,
+		description TEXT,
+		filename VARCHAR(255) NOT NULL,
+		original_filename VARCHAR(255),
+		created_at TIMESTAMP DEFAULT NOW(),
+		updated_at TIMESTAMP DEFAULT NOW()
+	);
+
 	-- Updated chat_history using schema bkpm
 	CREATE SCHEMA IF NOT EXISTS bkpm;
 

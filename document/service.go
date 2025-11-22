@@ -56,6 +56,15 @@ func (s *DocumentService) GenerateViewToken(filename string) (string, error) {
 	return token, nil
 }
 
+
+func (s *DocumentService) GenerateViewTokenByID(id int) (string, error) {
+	detail, err := s.repo.GetDocumentDetailByID(id)
+	if err != nil {
+		return "", fmt.Errorf("document detail not found: %w", err)
+	}
+	return s.GenerateViewToken(detail.Filename)
+}
+
 func (s *DocumentService) CreateDocument(document *Document, detail *DocumentDetail) error {
 	if err := s.repo.CreateDocument(document); err != nil {
 		return err
