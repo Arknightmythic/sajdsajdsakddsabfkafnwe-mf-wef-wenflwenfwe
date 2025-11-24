@@ -70,7 +70,7 @@ func (h *DocumentHandler) GenerateViewURLByID(ctx *gin.Context) {
 	}
 
 	
-	scheme := "http"
+	scheme := "https"
 	if ctx.Request.TLS != nil {
 		scheme = "https"
 	}
@@ -143,6 +143,27 @@ func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 	io.Copy(ctx.Writer, file)
 }
 
+func (h *DocumentHandler) getTeamNameForUser(ctx *gin.Context) string {
+	userID, exists := ctx.Get("user_id")
+	if !exists {
+		return ""
+	}
+
+	// Coba ambil nama tim asli dari database
+	teamName, err := h.service.GetTeamNameByUserID(userID.(int64))
+	if err == nil && teamName != "" {
+		return teamName
+	}
+
+	// Fallback ke account_type jika user tidak punya tim (misal superadmin tanpa role spesifik)
+	accountType, exists := ctx.Get("account_type")
+	if exists {
+		return accountType.(string)
+	}
+	
+	return "Unknown"
+}
+
 func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 	form, err := ctx.MultipartForm()
 	if err != nil {
@@ -168,11 +189,12 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	accountType, exists := ctx.Get("account_type")
+	// accountType, exists := ctx.Get("account_type")
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
 		return
 	}
+	teamName := h.getTeamNameForUser(ctx)
 
 	uploadDir := config.GetUploadPath()
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
@@ -235,7 +257,7 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 			Filename:     uniqueFilename,
 			DataType:     dataType,
 			Staff:        email.(string),
-			Team:         accountType.(string),
+			Team:         teamName,
 			Status:       &pendingStatus,
 			IsLatest:     &isLatest,
 			IsApprove:    nil,
@@ -390,11 +412,13 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 		return
 	}
 
-	accountType, exists := ctx.Get("account_type")
+	// accountType, exists := ctx.Get("account_type")
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
 		return
 	}
+
+	teamName := h.getTeamNameForUser(ctx)
 
 	originalFilename := file.Filename
 	ext := strings.ToLower(filepath.Ext(originalFilename))
@@ -426,7 +450,7 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 		Filename:     uniqueFilename,
 		DataType:     dataType,
 		Staff:        email.(string),
-		Team:         accountType.(string),
+		Team:         teamName,
 		Status:       &pendingStatus,
 		IsApprove:    nil,
 	}
@@ -622,16 +646,17 @@ func (h *DocumentHandler) BatchUploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	accountType, exists := ctx.Get("account_type")
+	// accountType, exists := ctx.Get("account_type")
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
 		return
 	}
+	teamName := h.getTeamNameForUser(ctx)
 
 	autoApproveStr := ctx.DefaultPostForm("auto_approve", "false")
 	autoApprove := autoApproveStr == "true"
 
-	batchID, err := h.service.StartBatchUpload(files, category, email.(string), accountType.(string), autoApprove)
+	batchID, err := h.service.StartBatchUpload(files, category, email.(string), teamName, autoApprove)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return

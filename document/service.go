@@ -527,3 +527,7 @@ func (s *DocumentService) GetBatchStatus(batchID string) (map[string]interface{}
 
 	return status, nil
 }
+
+func (s *DocumentService) GetTeamNameByUserID(userID int64) (string, error) {
+	return s.repo.GetTeamNameByUserID(userID)
+}

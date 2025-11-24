@@ -37,7 +37,7 @@ func (h *GrafanaHandler) GenerateEmbedURL(ctx *gin.Context) {
 	}
 
 	
-	scheme := "http"
+	scheme := "https"
 	if ctx.Request.TLS != nil {
 		scheme = "https"
 	}

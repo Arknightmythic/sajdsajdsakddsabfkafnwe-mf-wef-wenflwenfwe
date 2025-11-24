@@ -437,3 +437,19 @@ func (r *DocumentRepository) DeleteDocumentDetails(documentID int) error {
 	_, err := r.db.Exec(query, documentID)
 	return err
 }
+
+func (r *DocumentRepository) GetTeamNameByUserID(userID int64) (string, error) {
+	var teamName string
+	query := `
+		SELECT t.name
+		FROM teams t
+		JOIN roles r ON r.team_id = t.id
+		JOIN users u ON u.role_id = r.id
+		WHERE u.id = $1
+	`
+	err := r.db.Get(&teamName, query, userID)
+	if err != nil {
+		return "", err
+	}
+	return teamName, nil
+}
