@@ -9,6 +9,10 @@ import (
 func RunMigrations(db *sqlx.DB) {
 	log.Println("Starting migrations...")
 
+	// Catatan: Urutan pembuatan tabel dipertahankan agar tidak error saat fresh install
+	// Users dibuat lebih dulu, kemudian Roles. Oleh karena itu Constraint Users -> Roles 
+	// sebaiknya ditangani via ALTER TABLE di bawah agar aman dari urutan pembuatan.
+
 	query := `
 	CREATE TABLE IF NOT EXISTS users (
 		id SERIAL PRIMARY KEY,
@@ -31,11 +35,12 @@ func RunMigrations(db *sqlx.DB) {
 		pages TEXT[]
 	);
 
+	-- Updated: Menambahkan ON DELETE CASCADE pada definisi awal untuk fresh install
 	CREATE TABLE IF NOT EXISTS roles (
 		id SERIAL PRIMARY KEY,
 		name VARCHAR(100) NOT NULL,
 		permissions TEXT[],
-		team_id INT REFERENCES teams(id) ON DELETE SET NULL
+		team_id INT REFERENCES teams(id) ON DELETE CASCADE
 	);
 
 	CREATE TABLE IF NOT EXISTS documents (
@@ -138,6 +143,20 @@ func RunMigrations(db *sqlx.DB) {
 			ALTER TABLE document_details ALTER COLUMN data_type SET NOT NULL;
 		END IF;
 	END $$;
+
+	-- ============================================================
+	-- UPDATE FOREIGN KEY CONSTRAINTS (CASCADE & SET NULL)
+	-- ============================================================
+	
+	-- 1. Roles: Hapus FK lama jika ada, buat baru dengan ON DELETE CASCADE
+	ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_team_id_fkey;
+	ALTER TABLE roles ADD CONSTRAINT roles_team_id_fkey 
+		FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+
+	-- 2. Users: Hapus FK lama jika ada, buat baru dengan ON DELETE SET NULL
+	ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_id_fkey;
+	ALTER TABLE users ADD CONSTRAINT users_role_id_fkey 
+		FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
 	`
 
 	if _, err := db.Exec(query); err != nil {
