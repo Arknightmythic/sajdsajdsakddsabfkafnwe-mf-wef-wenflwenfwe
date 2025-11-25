@@ -13,6 +13,7 @@ import (
 	"dokuprime-be/team"
 	"dokuprime-be/user"
 	"dokuprime-be/guide"
+	"dokuprime-be/sso"
 	"log"
 	"net/http"
 	"os"
@@ -64,6 +65,7 @@ func main() {
 	grafana.RegisterRoutes(r, redisClient)
 	guide.RegisterRoutes(r, db, redisClient)
 	chat.RegisterRoutes(r, db)
+	sso.RegisterRoutes(r, db, redisClient)
 	asyncProcessor := document.RegisterRoutesWithProcessor(r, db, redisClient)
 
 	port := os.Getenv("SERVER_PORT")
