@@ -37,5 +37,6 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 		userGroup.GET("/:id", handler.GetUserByID)
 		userGroup.PUT("/:id", handler.UpdateUser)
 		userGroup.DELETE("/:id", handler.DeleteUser)
+		userGroup.GET("/me", handler.GetCurrentUser)
 	}
 }

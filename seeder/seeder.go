@@ -7,4 +7,6 @@ import (
 func RunSeeder(db *sqlx.DB) {
 	permissionSeeder(db)
 	superadminSeeder(db)
+	teamSeeder(db)
+	roleSeeder(db)
 }

@@ -28,7 +28,6 @@ func NewGuideHandler(service *GuideService, redisClient *redis.Client) *GuideHan
 }
 
 func (h *GuideHandler) UploadGuide(c *gin.Context) {
-	// Parse Form
 	title := c.PostForm("title")
 	description := c.PostForm("description")
 	
@@ -43,7 +42,6 @@ func (h *GuideHandler) UploadGuide(c *gin.Context) {
 		return
 	}
 
-	// Validasi Tipe File (Hanya PDF)
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	if ext != ".pdf" {
 		util.ErrorResponse(c, http.StatusBadRequest, "Only PDF files are allowed")
@@ -110,7 +108,7 @@ func (h *GuideHandler) UpdateGuide(c *gin.Context) {
 
 	title := c.PostForm("title")
 	description := c.PostForm("description")
-	file, _ := c.FormFile("file") // File opsional saat update
+	file, _ := c.FormFile("file")
 
 	if title == "" {
 		util.ErrorResponse(c, http.StatusBadRequest, "Title is required")
@@ -148,8 +146,6 @@ func (h *GuideHandler) DeleteGuide(c *gin.Context) {
 
 	util.SuccessResponse(c, "Guide deleted successfully", nil)
 }
-
-// --- VIEW LOGIC (Menggunakan ID -> Token) ---
 
 func (h *GuideHandler) GenerateViewURL(c *gin.Context) {
 	var req struct {
@@ -198,10 +194,8 @@ func (h *GuideHandler) ViewFile(c *gin.Context) {
 		return
 	}
 
-	// Hapus token setelah dipakai (One-time use)
 	h.redis.Del(ctxRedis, key)
 
-	// Ambil path file (Sama dengan document path)
 	filePath := config.GetDocumentPath(filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -209,7 +203,6 @@ func (h *GuideHandler) ViewFile(c *gin.Context) {
 		return
 	}
 
-	// Stream file ke user
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
 	c.File(filePath)

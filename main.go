@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
+	"dokuprime-be/azure"
 	"dokuprime-be/chat"
 	"dokuprime-be/config"
 	"dokuprime-be/document"
 	"dokuprime-be/grafana"
+	"dokuprime-be/guide"
 	"dokuprime-be/migrate"
 	"dokuprime-be/permission"
 	"dokuprime-be/role"
 	"dokuprime-be/seeder"
 	"dokuprime-be/team"
 	"dokuprime-be/user"
-	"dokuprime-be/guide"
 	"log"
 	"net/http"
 	"os"
@@ -65,6 +66,7 @@ func main() {
 	guide.RegisterRoutes(r, db, redisClient)
 	chat.RegisterRoutes(r, db)
 	asyncProcessor := document.RegisterRoutesWithProcessor(r, db, redisClient)
+	azure.RegisterRoutes(r, db, redisClient)
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {

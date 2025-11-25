@@ -26,7 +26,6 @@ func NewGuideService(repo *GuideRepository, redisClient *redis.Client) *GuideSer
 	}
 }
 
-// Helper: Generate Unique Filename (Similar to document service)
 func generateUniqueFilename(originalFilename string) string {
 	ext := filepath.Ext(originalFilename)
 	timestamp := time.Now().Unix()
@@ -35,12 +34,11 @@ func generateUniqueFilename(originalFilename string) string {
 }
 
 func (s *GuideService) UploadGuide(title, description string, file *multipart.FileHeader) (*Guide, error) {
-	// 1. Persiapkan File
+
 	uniqueFilename := generateUniqueFilename(file.Filename)
-	uploadDir := config.GetUploadPath() // Menggunakan PATH yang SAMA dengan document
+	uploadDir := config.GetUploadPath()
 	filePath := filepath.Join(uploadDir, uniqueFilename)
 
-	// 2. Simpan File Fisik
 	src, err := file.Open()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open uploaded file: %w", err)
@@ -54,11 +52,10 @@ func (s *GuideService) UploadGuide(title, description string, file *multipart.Fi
 	defer dst.Close()
 
 	if _, err := dst.ReadFrom(src); err != nil {
-		os.Remove(filePath) // Hapus file jika gagal tulis
+		os.Remove(filePath)
 		return nil, fmt.Errorf("failed to save file content: %w", err)
 	}
 
-	// 3. Simpan ke Database
 	guide := &Guide{
 		Title:            title,
 		Description:      description,
@@ -67,7 +64,7 @@ func (s *GuideService) UploadGuide(title, description string, file *multipart.Fi
 	}
 
 	if err := s.repo.Create(guide); err != nil {
-		os.Remove(filePath) // Hapus file jika DB error
+		os.Remove(filePath)
 		return nil, err
 	}
 
@@ -83,7 +80,7 @@ func (s *GuideService) GetByID(id int) (*Guide, error) {
 }
 
 func (s *GuideService) UpdateGuide(id int, title, description string, file *multipart.FileHeader) (*Guide, error) {
-	// 1. Ambil data lama
+
 	existingGuide, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -92,15 +89,12 @@ func (s *GuideService) UpdateGuide(id int, title, description string, file *mult
 	existingGuide.Title = title
 	existingGuide.Description = description
 
-	// 2. Jika ada file baru, ganti file lama
 	if file != nil {
 		uploadDir := config.GetUploadPath()
-		
-		// Hapus file lama
-		oldFilePath := filepath.Join(uploadDir, existingGuide.Filename)
-		os.Remove(oldFilePath) // Ignore error jika file lama tidak ada
 
-		// Simpan file baru
+		oldFilePath := filepath.Join(uploadDir, existingGuide.Filename)
+		os.Remove(oldFilePath)
+
 		uniqueFilename := generateUniqueFilename(file.Filename)
 		newFilePath := filepath.Join(uploadDir, uniqueFilename)
 
@@ -125,7 +119,6 @@ func (s *GuideService) UpdateGuide(id int, title, description string, file *mult
 		existingGuide.OriginalFilename = file.Filename
 	}
 
-	// 3. Update Database
 	if err := s.repo.Update(existingGuide); err != nil {
 		return nil, err
 	}
@@ -134,22 +127,19 @@ func (s *GuideService) UpdateGuide(id int, title, description string, file *mult
 }
 
 func (s *GuideService) DeleteGuide(id int) error {
-	// 1. Ambil data
+
 	guide, err := s.repo.GetByID(id)
 	if err != nil {
 		return err
 	}
 
-	// 2. Hapus File Fisik
 	uploadDir := config.GetUploadPath()
 	filePath := filepath.Join(uploadDir, guide.Filename)
-	os.Remove(filePath) // Ignore error, lanjut hapus DB
+	os.Remove(filePath)
 
-	// 3. Hapus Database
 	return s.repo.Delete(id)
 }
 
-// GenerateViewTokenByID: Implementasi view by ID seperti permintaan sebelumnya
 func (s *GuideService) GenerateViewTokenByID(id int) (string, error) {
 	guide, err := s.repo.GetByID(id)
 	if err != nil {
@@ -160,7 +150,7 @@ func (s *GuideService) GenerateViewTokenByID(id int) (string, error) {
 	key := "view_guide_token:" + token
 
 	ctx := context.Background()
-	// Simpan filename di Redis dengan expiry 5 menit
+
 	err = s.redis.Set(ctx, key, guide.Filename, 5*time.Minute).Err()
 	if err != nil {
 		return "", fmt.Errorf("failed to store view token: %w", err)

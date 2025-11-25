@@ -149,13 +149,13 @@ func (h *DocumentHandler) getTeamNameForUser(ctx *gin.Context) string {
 		return ""
 	}
 
-	// Coba ambil nama tim asli dari database
+	
 	teamName, err := h.service.GetTeamNameByUserID(userID.(int64))
 	if err == nil && teamName != "" {
 		return teamName
 	}
 
-	// Fallback ke account_type jika user tidak punya tim (misal superadmin tanpa role spesifik)
+	
 	accountType, exists := ctx.Get("account_type")
 	if exists {
 		return accountType.(string)
@@ -189,7 +189,7 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	// accountType, exists := ctx.Get("account_type")
+	
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
 		return
@@ -412,7 +412,7 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 		return
 	}
 
-	// accountType, exists := ctx.Get("account_type")
+	
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
 		return
@@ -646,7 +646,7 @@ func (h *DocumentHandler) BatchUploadDocument(ctx *gin.Context) {
 		return
 	}
 
-	// accountType, exists := ctx.Get("account_type")
+	
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
 		return
