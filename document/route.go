@@ -28,6 +28,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	{
 		documentRoutes.POST("/batch-upload", handler.BatchUploadDocument)
 		documentRoutes.GET("/batch-status", handler.GetBatchUploadStatus)
+		documentRoutes.POST("/batch-delete", handler.BatchDeleteDocument)
 
 		documentRoutes.POST("/generate-view-url", handler.GenerateViewURL)
 		documentRoutes.POST("/generate-view-url-id", handler.GenerateViewURLByID)

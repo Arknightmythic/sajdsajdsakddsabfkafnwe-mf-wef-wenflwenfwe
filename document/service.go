@@ -531,3 +531,21 @@ func (s *DocumentService) GetBatchStatus(batchID string) (map[string]interface{}
 func (s *DocumentService) GetTeamNameByUserID(userID int64) (string, error) {
 	return s.repo.GetTeamNameByUserID(userID)
 }
+
+func (s *DocumentService) BatchDeleteDocuments(ids []int) (int, []string) {
+	successCount := 0
+	var errorMessages []string
+
+	for _, id := range ids {
+		// Panggil fungsi DeleteDocument yang sudah ada (ini sudah handle DB + External/Qdrant + File)
+		err := s.DeleteDocument(id)
+		if err != nil {
+			log.Printf("Batch Delete: Failed to delete document ID %d: %v", id, err)
+			errorMessages = append(errorMessages, fmt.Sprintf("ID %d: %v", id, err))
+		} else {
+			successCount++
+		}
+	}
+
+	return successCount, errorMessages
+}

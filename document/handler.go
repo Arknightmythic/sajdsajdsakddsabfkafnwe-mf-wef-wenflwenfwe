@@ -699,3 +699,36 @@ func parseDate(s string) (time.Time, error) {
 	}
 	return time.Time{}, fmt.Errorf("invalid date format: %s", s)
 }
+
+
+type BatchDeleteRequest struct {
+	IDs []int `json:"ids" binding:"required,min=1"`
+}
+
+func (h *DocumentHandler) BatchDeleteDocument(c *gin.Context) {
+	var req BatchDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, http.StatusBadRequest, "Invalid request body. 'ids' array is required.")
+		return
+	}
+
+	successCount, errors := h.service.BatchDeleteDocuments(req.IDs)
+
+	if len(errors) > 0 && successCount == 0 {
+		// Jika gagal semua
+		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to delete all selected documents")
+		return
+	}
+
+	responseMsg := fmt.Sprintf("Successfully deleted %d documents", successCount)
+	if len(errors) > 0 {
+		responseMsg = fmt.Sprintf("Deleted %d documents with %d failures", successCount, len(errors))
+	}
+
+	// Menggunakan StatusMultiStatus (207) atau OK (200) tergantung preferensi, di sini pakai 200 agar umum
+	util.SuccessResponse(c, responseMsg, gin.H{
+		"success_count": successCount,
+		"failed_count":  len(errors),
+		"errors":        errors, // Opsional: kirim detail error jika perlu
+	})
+}
