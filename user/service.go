@@ -112,9 +112,11 @@ func (s *UserService) GetUserByID(id int) (*GetUserDTO, error) {
 
 	if user.RoleID != nil {
 		role, err := s.serviceRole.GetByID(*user.RoleID)
-		if err == nil {
-			getUserDto.Role = role
+		if err != nil {
+			return nil, err
 		}
+
+		getUserDto.Role = role
 	}
 
 	return getUserDto, nil
