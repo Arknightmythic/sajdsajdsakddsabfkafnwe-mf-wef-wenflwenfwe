@@ -113,7 +113,7 @@ type ChatHistoryFilter struct {
 	EndDate       *time.Time
 	Limit         int
 	Offset        int
-	IsValidated   *string // Mendukung "null", "0", "1"
+	IsValidated   *string
 	IsAnswered    *bool
 }
 

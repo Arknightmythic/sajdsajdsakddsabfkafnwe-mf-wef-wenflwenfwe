@@ -47,14 +47,12 @@ func (r *GuideRepository) GetAll(filter GuideFilter) ([]Guide, int, error) {
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	// Count Total
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM guides %s", where)
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
-	// Sorting
 	allowedSort := map[string]bool{"created_at": true, "title": true, "updated_at": true}
 	sortBy := "created_at"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
@@ -66,7 +64,6 @@ func (r *GuideRepository) GetAll(filter GuideFilter) ([]Guide, int, error) {
 		sortDirection = "ASC"
 	}
 
-	// Query Data
 	query := fmt.Sprintf(`
 		SELECT id, title, description, filename, original_filename, created_at, updated_at
 		FROM guides

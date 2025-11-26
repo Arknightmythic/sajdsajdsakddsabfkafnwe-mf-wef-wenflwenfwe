@@ -13,10 +13,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 	service := NewGuideService(repo, redisClient)
 	handler := NewGuideHandler(service, redisClient)
 
-	// Public / View endpoint (tanpa auth middleware untuk view file fisik via token)
 	r.GET("/api/guides/view-file", handler.ViewFile)
 
-	// Protected Routes
 	guideGroup := r.Group("/api/guides")
 	guideGroup.Use(middleware.AuthMiddleware())
 	{
@@ -25,8 +23,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 		guideGroup.GET("/:id", handler.GetByID)
 		guideGroup.PUT("/:id", handler.UpdateGuide)
 		guideGroup.DELETE("/:id", handler.DeleteGuide)
-		
-		// Endpoint untuk generate link view by ID
+
 		guideGroup.POST("/generate-view-url", handler.GenerateViewURL)
 	}
 }

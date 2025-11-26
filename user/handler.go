@@ -310,3 +310,19 @@ func (h *UserHandler) RefreshToken(c *gin.Context) {
 		"access_token": accessToken,
 	})
 }
+
+func (h *UserHandler) GetCurrentUser(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		util.ErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	user, err := h.Service.GetUserByID(int(userID.(int64)))
+	if err != nil {
+		util.ErrorResponse(c, http.StatusNotFound, "User not found")
+		return
+	}
+
+	util.SuccessResponse(c, "Current user fetched successfully", user)
+}
