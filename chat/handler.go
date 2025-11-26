@@ -624,6 +624,7 @@ func parseDateRange(startDateStr, endDateStr string) (*time.Time, *time.Time, er
 		if err != nil {
 			return nil, nil, err
 		}
+		t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 		endDatePtr = &t
 	}
 

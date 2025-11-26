@@ -332,6 +332,7 @@ func (h *DocumentHandler) GetDocuments(ctx *gin.Context) {
 	}
 	if ed := ctx.Query("end_date"); ed != "" {
 		if t, err := parseDate(ed); err == nil {
+			t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 			endDatePtr = &t
 		}
 	}
@@ -569,6 +570,7 @@ func (h *DocumentHandler) GetAllDocumentDetails(ctx *gin.Context) {
 	}
 	if ed := ctx.Query("end_date"); ed != "" {
 		if t, err := parseDate(ed); err == nil {
+			t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 			endDatePtr = &t
 		}
 	}
