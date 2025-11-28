@@ -13,7 +13,7 @@ func NewHelpdeskRepository(db *sqlx.DB) *HelpdeskRepository {
 }
 
 func (r *HelpdeskRepository) Create(helpdesk *Helpdesk) error {
-	query := `INSERT INTO bkpm.helpdesk (session_id, platform, platform_unique_id, status, user_id) 
+	query := `INSERT INTO helpdesk (session_id, platform, platform_unique_id, status, user_id) 
 			  VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`
 	return r.db.QueryRow(query, helpdesk.SessionID, helpdesk.Platform, helpdesk.PlatformUniqueID, helpdesk.Status, helpdesk.UserID).
 		Scan(&helpdesk.ID, &helpdesk.CreatedAt)
@@ -22,7 +22,7 @@ func (r *HelpdeskRepository) Create(helpdesk *Helpdesk) error {
 func (r *HelpdeskRepository) GetAll(limit, offset int, search string) ([]Helpdesk, error) {
 	var helpdesks []Helpdesk
 	query := `SELECT id, session_id, platform, platform_unique_id, status, user_id, created_at 
-			  FROM bkpm.helpdesk`
+			  FROM helpdesk`
 
 	if search != "" {
 		query += ` WHERE platform ILIKE $3 OR status ILIKE $3`
@@ -42,7 +42,7 @@ func (r *HelpdeskRepository) GetAll(limit, offset int, search string) ([]Helpdes
 
 func (r *HelpdeskRepository) GetTotal(search string) (int, error) {
 	var total int
-	query := `SELECT COUNT(*) FROM bkpm.helpdesk`
+	query := `SELECT COUNT(*) FROM helpdesk`
 
 	if search != "" {
 		query += ` WHERE platform ILIKE $1 OR status ILIKE $1`
@@ -57,7 +57,7 @@ func (r *HelpdeskRepository) GetTotal(search string) (int, error) {
 func (r *HelpdeskRepository) GetByID(id int) (*Helpdesk, error) {
 	var helpdesk Helpdesk
 	query := `SELECT id, session_id, platform, platform_unique_id, status, user_id, created_at 
-			  FROM bkpm.helpdesk WHERE id = $1`
+			  FROM helpdesk WHERE id = $1`
 	err := r.db.Get(&helpdesk, query, id)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (r *HelpdeskRepository) GetByID(id int) (*Helpdesk, error) {
 }
 
 func (r *HelpdeskRepository) Update(helpdesk *Helpdesk) error {
-	query := `UPDATE bkpm.helpdesk 
+	query := `UPDATE helpdesk 
 			  SET session_id = $1, platform = $2, platform_unique_id = $3, status = $4, user_id = $5 
 			  WHERE id = $6`
 	_, err := r.db.Exec(query, helpdesk.SessionID, helpdesk.Platform, helpdesk.PlatformUniqueID, helpdesk.Status, helpdesk.UserID, helpdesk.ID)
@@ -74,20 +74,20 @@ func (r *HelpdeskRepository) Update(helpdesk *Helpdesk) error {
 }
 
 func (r *HelpdeskRepository) UpdateStatus(id int, status string) error {
-	query := `UPDATE bkpm.helpdesk SET status = $1 WHERE id = $2`
+	query := `UPDATE helpdesk SET status = $1 WHERE id = $2`
 	_, err := r.db.Exec(query, status, id)
 	return err
 }
 
 func (r *HelpdeskRepository) Delete(id int) error {
-	_, err := r.db.Exec(`DELETE FROM bkpm.helpdesk WHERE id = $1`, id)
+	_, err := r.db.Exec(`DELETE FROM helpdesk WHERE id = $1`, id)
 	return err
 }
 
 func (r *HelpdeskRepository) GetBySessionID(sessionID string) (*Helpdesk, error) {
 	var helpdesk Helpdesk
 	query := `SELECT id, session_id, platform, platform_unique_id, status, user_id, created_at 
-			  FROM bkpm.helpdesk WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1`
+			  FROM helpdesk WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1`
 	err := r.db.Get(&helpdesk, query, sessionID)
 	if err != nil {
 		return nil, err

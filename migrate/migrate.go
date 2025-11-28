@@ -59,6 +59,18 @@ func RunMigrations(db *sqlx.DB) {
         detail TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS conversations (
+        id UUID PRIMARY KEY,
+        start_timestamp TIMESTAMP NOT NULL,
+        end_timestamp TIMESTAMP,
+        platform TEXT NOT NULL,
+        platform_unique_id TEXT NOT NULL,
+        is_helpdesk BOOLEAN DEFAULT false NOT NULL,
+        context TEXT,
+        is_positive_feedback BOOLEAN,
+        is_ask_helpdesk BOOLEAN
+    );
+
     -- 2. Tables with Foreign Keys or Dependencies
     CREATE TABLE IF NOT EXISTS roles (
         id SERIAL PRIMARY KEY,
@@ -80,18 +92,6 @@ func RunMigrations(db *sqlx.DB) {
         is_approve BOOLEAN,
         created_at TIMESTAMP DEFAULT NOW(),
         ingest_status TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS conversations (
-        id UUID PRIMARY KEY,
-        start_timestamp TIMESTAMP NOT NULL,
-        end_timestamp TIMESTAMP,
-        platform TEXT NOT NULL,
-        platform_unique_id TEXT NOT NULL,
-        is_helpdesk BOOLEAN DEFAULT false NOT NULL,
-        context TEXT NULL,
-        is_positive_feedback BOOLEAN,
-        helpdesk_count INT
     );
 
     CREATE TABLE IF NOT EXISTS chat_history (
@@ -126,12 +126,20 @@ func RunMigrations(db *sqlx.DB) {
         session_id UUID NOT NULL REFERENCES conversations(id),
         platform VARCHAR(50) NOT NULL,
         platform_unique_id VARCHAR(100),
-        status VARCHAR(50) NOT NULL,
-        user_id INT,
+        user_id INT NOT NULL REFERENCES users(id),
+        status VARCHAR(50) NULL,
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
     );
 
-    -- 3. Reporting / TBL Tables (No PKs defined in DDL, but creating as requested)
+    CREATE TABLE IF NOT EXISTS email_metadata (
+        conversation_id UUID NOT NULL,
+        subject VARCHAR,
+        in_reply_to VARCHAR,
+        "references" VARCHAR,
+        thread_key VARCHAR
+    );
+
+    -- 3. Reporting / TBL Tables
     CREATE TABLE IF NOT EXISTS tbl_agent_conv (
         user_id VARCHAR(50),
         conversation_id VARCHAR(50),
@@ -180,23 +188,18 @@ func RunMigrations(db *sqlx.DB) {
     CREATE INDEX IF NOT EXISTS idx_document_details_is_latest ON document_details(is_latest);
     CREATE INDEX IF NOT EXISTS idx_document_details_status ON document_details(status);
 
-    -- 5. Alterations (Idempotency Checks)
-    -- If tables exist from previous runs, ensure new columns are added.
-
-    -- Updates for 'conversations'
+    -- 5. Column Alterations (Idempotency Checks)
     DO $$ 
     BEGIN
+        -- Updates for 'conversations'
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='is_positive_feedback') THEN
             ALTER TABLE conversations ADD COLUMN is_positive_feedback BOOLEAN;
         END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='helpdesk_count') THEN
-            ALTER TABLE conversations ADD COLUMN helpdesk_count INT;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='is_ask_helpdesk') THEN
+            ALTER TABLE conversations ADD COLUMN is_ask_helpdesk BOOLEAN;
         END IF;
-    END $$;
 
-    -- Updates for 'chat_history'
-    DO $$ 
-    BEGIN
+        -- Updates for 'chat_history'
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_history' AND column_name='is_validated') THEN
             ALTER TABLE chat_history ADD COLUMN is_validated BOOLEAN;
         END IF;
@@ -206,19 +209,13 @@ func RunMigrations(db *sqlx.DB) {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_history' AND column_name='citation') THEN
             ALTER TABLE chat_history ADD COLUMN citation JSONB;
         END IF;
-    END $$;
 
-    -- Updates for 'document_details'
-    DO $$ 
-    BEGIN
+        -- Updates for 'document_details'
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='document_details' AND column_name='ingest_status') THEN
             ALTER TABLE document_details ADD COLUMN ingest_status TEXT;
         END IF;
-    END $$;
 
-    -- Updates for 'users' (Legacy check from old migrate)
-    DO $$ 
-    BEGIN
+        -- Updates for 'users'
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='name') THEN
             ALTER TABLE users ADD COLUMN name VARCHAR(255);
             UPDATE users SET name = 'User' WHERE name IS NULL;

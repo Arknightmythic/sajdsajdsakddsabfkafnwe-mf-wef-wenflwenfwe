@@ -187,9 +187,10 @@ func (h *HelpdeskHandler) DeleteHelpdesk(ctx *gin.Context) {
 
 func (h *HelpdeskHandler) AskHelpdesk(ctx *gin.Context) {
 	var req struct {
-		SessionID string `json:"session_id" binding:"required"`
-		Message   string `json:"message" binding:"required"`
-		UserType  string `json:"user_type" binding:"required"`
+		SessionID      string `json:"session_id" binding:"required"`
+		Message        string `json:"message" binding:"required"`
+		UserType       string `json:"user_type" binding:"required"`
+		StartTimestamp string `json:"start_timestamp"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -215,6 +216,7 @@ func (h *HelpdeskHandler) AskHelpdesk(ctx *gin.Context) {
 		req.UserType,
 		helpdesk.Platform,
 		helpdesk.PlatformUniqueID,
+		req.StartTimestamp,
 	)
 
 	if err != nil {

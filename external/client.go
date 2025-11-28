@@ -44,6 +44,7 @@ type ChatRequest struct {
 	Query            string `json:"query"`
 	ConversationID   string `json:"conversation_id"`
 	Platform         string `json:"platform"`
+	StartTimestamp   string `json:"start_timestamp"`
 }
 
 type FlexibleStringArray []string
@@ -210,6 +211,7 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
+
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
