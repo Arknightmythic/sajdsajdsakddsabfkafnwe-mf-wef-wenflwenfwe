@@ -9,6 +9,10 @@ import (
 func RunMigrations(db *sqlx.DB) {
 	log.Println("Starting migrations...")
 
+	// Catatan: Urutan pembuatan tabel dipertahankan agar tidak error saat fresh install
+	// Users dibuat lebih dulu, kemudian Roles. Oleh karena itu Constraint Users -> Roles 
+	// sebaiknya ditangani via ALTER TABLE di bawah agar aman dari urutan pembuatan.
+
 	query := `
     -- 1. Independent Tables
     CREATE TABLE IF NOT EXISTS users (
@@ -32,6 +36,14 @@ func RunMigrations(db *sqlx.DB) {
         pages TEXT[]
     );
 
+    -- Updated: Menambahkan ON DELETE CASCADE pada definisi awal untuk fresh install
+    CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        permissions TEXT[],
+        team_id INT REFERENCES teams(id) ON DELETE CASCADE
+    );
+    
     CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
         category VARCHAR(100) NOT NULL
@@ -60,12 +72,7 @@ func RunMigrations(db *sqlx.DB) {
     );
 
     -- 2. Tables with Foreign Keys or Dependencies
-    CREATE TABLE IF NOT EXISTS roles (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        permissions TEXT[],
-        team_id INT REFERENCES teams(id) ON DELETE CASCADE
-    );
+    -- Note: Table 'roles' sudah didefinisikan di atas, duplikasi IF NOT EXISTS aman tapi redundant.
 
     CREATE TABLE IF NOT EXISTS document_details (
         id SERIAL PRIMARY KEY,
@@ -157,6 +164,32 @@ func RunMigrations(db *sqlx.DB) {
         channel VARCHAR(50)
     );
 
+    -- Add data_type column if missing
+    DO $$ 
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='document_details' AND column_name='data_type') THEN
+            ALTER TABLE document_details ADD COLUMN data_type VARCHAR(10);
+            UPDATE document_details SET data_type = 'pdf' WHERE data_type IS NULL;
+            ALTER TABLE document_details ALTER COLUMN data_type SET NOT NULL;
+        END IF;
+    END $$;
+
+    -- ============================================================
+    -- UPDATE FOREIGN KEY CONSTRAINTS (CASCADE & SET NULL)
+    -- ============================================================
+    
+    -- 1. Roles: Hapus FK lama jika ada, buat baru dengan ON DELETE CASCADE
+    ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_team_id_fkey;
+    ALTER TABLE roles ADD CONSTRAINT roles_team_id_fkey 
+        FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+
+    -- 2. Users: Hapus FK lama jika ada, buat baru dengan ON DELETE SET NULL
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_id_fkey;
+    ALTER TABLE users ADD CONSTRAINT users_role_id_fkey 
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
+    
+    -- Masukkan tabel ini ke dalam string query
     CREATE TABLE IF NOT EXISTS tbl_user_conv_detail (
         conversation_id VARCHAR(50),
         message_id VARCHAR(50),
