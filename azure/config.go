@@ -30,8 +30,6 @@ func NewAzureConfig() *AzureConfig {
 	if redirectPath == "" {
 		redirectPath = "/api/authazure/callback"
 	}
-
-	// FIXED: Use the full callback URL including the path
 	frontendCallbackURL := os.Getenv("FRONTEND_AZURE_AUTH_CALLBACK_URI")
 	if frontendCallbackURL == "" {
 		frontendCallbackURL = "http://localhost:5173/auth-microsoft/callback"

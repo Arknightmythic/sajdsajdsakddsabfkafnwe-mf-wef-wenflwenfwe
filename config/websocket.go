@@ -11,30 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type WebSocketClient struct {
-	conn              *websocket.Conn
-	url               string
-	token             string
-	mu                sync.Mutex
-	isConnected       bool
-	reconnectInterval time.Duration
-	subscriptions     map[string][]MessageHandler
-	subsMu            sync.RWMutex
-	pendingAcks       map[string]chan AckResponse
-	acksMu            sync.RWMutex
-	stopChan          chan struct{}
-}
-
-type MessageHandler func(msg IncomingMessage)
-
-type IncomingMessage struct {
-	Event    string          `json:"event"`
-	Channel  string          `json:"channel"`
-	StreamID string          `json:"streamId"`
-	Data     json.RawMessage `json:"data"`
-}
-
-type OutgoingMessage struct {
+type WebSocketMessage struct {
 	Action        string      `json:"action"`
 	Channel       string      `json:"channel"`
 	Data          interface{} `json:"data,omitempty"`
@@ -42,295 +19,198 @@ type OutgoingMessage struct {
 	LastMessageID string      `json:"lastMessageId,omitempty"`
 }
 
-type AckResponse struct {
-	Status    string `json:"status"`
-	MessageID string `json:"messageId,omitempty"`
-	Error     string `json:"error,omitempty"`
-	Channel   string `json:"channel,omitempty"`
-	Message   string `json:"message,omitempty"`
+type WebSocketResponse struct {
+	Event    string          `json:"event"`
+	Channel  string          `json:"channel"`
+	StreamID string          `json:"streamId"`
+	Data     json.RawMessage `json:"data"`
+	Status   string          `json:"status"`
+	Message  string          `json:"message"`
+	Error    string          `json:"error"`
 }
 
-type Config struct {
-	URL               string
-	Token             string
-	ReconnectInterval time.Duration
+type WebSocketClient struct {
+	conn            *websocket.Conn
+	url             string
+	token           string
+	mu              sync.Mutex
+	reconnectMu     sync.Mutex
+	messageHandlers map[string][]func(json.RawMessage)
+	connected       bool
+	reconnecting    bool
 }
 
-var (
-	defaultClient *WebSocketClient
-	once          sync.Once
-)
-
-func InitWebSocketClient(config Config) error {
-	var err error
-	once.Do(func() {
-		if config.ReconnectInterval == 0 {
-			config.ReconnectInterval = 5 * time.Second
-		}
-
-		defaultClient = &WebSocketClient{
-			url:               config.URL,
-			token:             config.Token,
-			reconnectInterval: config.ReconnectInterval,
-			subscriptions:     make(map[string][]MessageHandler),
-			pendingAcks:       make(map[string]chan AckResponse),
-			stopChan:          make(chan struct{}),
-		}
-
-		err = defaultClient.Connect()
-		if err != nil {
-			log.Printf("❌ Gagal koneksi WebSocket: %v", err)
-
-			go defaultClient.autoReconnect()
-		} else {
-			log.Println("✅ WebSocket client terhubung")
-		}
-	})
-	return err
-}
-
-func GetClient() *WebSocketClient {
-	if defaultClient == nil {
-		log.Fatal("WebSocket client belum diinisialisasi. Panggil InitWebSocketClient terlebih dahulu.")
+func NewWebSocketClient(url, token string) *WebSocketClient {
+	return &WebSocketClient{
+		url:             url,
+		token:           token,
+		messageHandlers: make(map[string][]func(json.RawMessage)),
+		connected:       false,
+		reconnecting:    false,
 	}
-	return defaultClient
 }
 
-func (c *WebSocketClient) Connect() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (wsc *WebSocketClient) Connect() error {
+	wsc.reconnectMu.Lock()
+	defer wsc.reconnectMu.Unlock()
 
-	if c.isConnected {
+	if wsc.connected {
 		return nil
 	}
 
-	wsURL := fmt.Sprintf("%s?token=%s", c.url, c.token)
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	urlWithToken := fmt.Sprintf("%s?token=%s", wsc.url, wsc.token)
+	conn, _, err := websocket.DefaultDialer.Dial(urlWithToken, nil)
 	if err != nil {
-		return fmt.Errorf("gagal dial WebSocket: %w", err)
+		return fmt.Errorf("failed to connect to WebSocket: %w", err)
 	}
 
-	c.conn = conn
-	c.isConnected = true
+	wsc.conn = conn
+	wsc.connected = true
+	log.Println("✅ Connected to WebSocket server")
 
-	go c.readMessages()
+	go wsc.readMessages()
 
 	return nil
 }
 
-func (c *WebSocketClient) autoReconnect() {
-	ticker := time.NewTicker(c.reconnectInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.stopChan:
-			return
-		case <-ticker.C:
-			if !c.isConnected {
-				log.Println("🔄 Mencoba reconnect ke WebSocket...")
-				if err := c.Connect(); err != nil {
-					log.Printf("❌ Reconnect gagal: %v", err)
-				} else {
-					log.Println("✅ Reconnect berhasil")
-
-					c.resubscribeAll()
-				}
-			}
-		}
-	}
-}
-
-func (c *WebSocketClient) resubscribeAll() {
-	c.subsMu.RLock()
-	channels := make([]string, 0, len(c.subscriptions))
-	for channel := range c.subscriptions {
-		channels = append(channels, channel)
-	}
-	c.subsMu.RUnlock()
-
-	for _, channel := range channels {
-		if err := c.Subscribe(channel, "$", nil); err != nil {
-			log.Printf("❌ Gagal re-subscribe ke %s: %v", channel, err)
-		}
-	}
-}
-
-func (c *WebSocketClient) readMessages() {
+func (wsc *WebSocketClient) readMessages() {
 	defer func() {
-		c.mu.Lock()
-		c.isConnected = false
-		if c.conn != nil {
-			c.conn.Close()
-		}
-		c.mu.Unlock()
-		log.Println("⚠️ WebSocket connection closed, akan reconnect...")
-		go c.autoReconnect()
+		wsc.mu.Lock()
+		wsc.connected = false
+		wsc.mu.Unlock()
+
+		go wsc.reconnect()
 	}()
 
 	for {
-		_, message, err := c.conn.ReadMessage()
+		var response WebSocketResponse
+		err := wsc.conn.ReadJSON(&response)
 		if err != nil {
-			log.Printf("❌ Error membaca pesan: %v", err)
-			return
-		}
-
-		var ackResp AckResponse
-		if err := json.Unmarshal(message, &ackResp); err == nil {
-
-			if ackResp.Status == "ack" || ackResp.Status == "error_ack" || ackResp.Status == "subscribed" {
-				c.handleAck(ackResp)
-				continue
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket error: %v", err)
 			}
+			break
 		}
 
-		var incoming IncomingMessage
-		if err := json.Unmarshal(message, &incoming); err != nil {
-			log.Printf("⚠️ Gagal parse pesan: %v", err)
-			continue
-		}
+		switch response.Event {
+		case "message":
+			wsc.mu.Lock()
+			handlers, exists := wsc.messageHandlers[response.Channel]
+			wsc.mu.Unlock()
 
-		if incoming.Event == "message" {
-			c.subsMu.RLock()
-			handlers, ok := c.subscriptions[incoming.Channel]
-			c.subsMu.RUnlock()
-
-			if ok {
+			if exists {
 				for _, handler := range handlers {
-					go handler(incoming)
+					go handler(response.Data)
 				}
 			}
+		default:
+			if response.Status != "" {
+				log.Printf("WebSocket status: %s - %s", response.Status, response.Message)
+			}
 		}
 	}
 }
 
-func (c *WebSocketClient) handleAck(ack AckResponse) {
-	c.acksMu.RLock()
-	ackChan, ok := c.pendingAcks[ack.MessageID]
-	c.acksMu.RUnlock()
+func (wsc *WebSocketClient) reconnect() {
+	wsc.reconnectMu.Lock()
+	if wsc.reconnecting {
+		wsc.reconnectMu.Unlock()
+		return
+	}
+	wsc.reconnecting = true
+	wsc.reconnectMu.Unlock()
 
-	if ok {
-		select {
-		case ackChan <- ack:
-		case <-time.After(1 * time.Second):
-			log.Printf("⚠️ Timeout mengirim ack untuk messageId: %s", ack.MessageID)
+	defer func() {
+		wsc.reconnectMu.Lock()
+		wsc.reconnecting = false
+		wsc.reconnectMu.Unlock()
+	}()
+
+	for i := 0; i < 5; i++ {
+		log.Printf("Attempting to reconnect to WebSocket (attempt %d/5)...", i+1)
+		time.Sleep(time.Second * time.Duration(i+1))
+
+		if err := wsc.Connect(); err == nil {
+			log.Println("✅ Reconnected to WebSocket server")
+
+			wsc.mu.Lock()
+			channels := make([]string, 0, len(wsc.messageHandlers))
+			for channel := range wsc.messageHandlers {
+				channels = append(channels, channel)
+			}
+			wsc.mu.Unlock()
+
+			for _, channel := range channels {
+				if err := wsc.Subscribe(channel, "$"); err != nil {
+					log.Printf("Failed to resubscribe to channel %s: %v", channel, err)
+				}
+			}
+			return
 		}
 	}
+
+	log.Println("❌ Failed to reconnect to WebSocket after 5 attempts")
 }
 
-func (c *WebSocketClient) Subscribe(channel string, lastMessageID string, handler MessageHandler) error {
-	if !c.isConnected {
-		return fmt.Errorf("WebSocket tidak terhubung")
+func (wsc *WebSocketClient) Subscribe(channel, lastMessageID string) error {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+
+	if !wsc.connected {
+		return fmt.Errorf("WebSocket not connected")
 	}
 
-	if handler != nil {
-		c.subsMu.Lock()
-		c.subscriptions[channel] = append(c.subscriptions[channel], handler)
-		c.subsMu.Unlock()
-	}
-
-	msg := OutgoingMessage{
+	msg := WebSocketMessage{
 		Action:        "subscribe",
 		Channel:       channel,
 		LastMessageID: lastMessageID,
 	}
 
-	c.mu.Lock()
-	err := c.conn.WriteJSON(msg)
-	c.mu.Unlock()
-
-	if err != nil {
-		return fmt.Errorf("gagal subscribe: %w", err)
-	}
-
-	log.Printf("📡 Subscribed ke channel: %s", channel)
-	return nil
+	return wsc.conn.WriteJSON(msg)
 }
 
-func (c *WebSocketClient) Publish(channel string, data interface{}) (string, error) {
-	if !c.isConnected {
-		return "", fmt.Errorf("WebSocket tidak terhubung")
+func (wsc *WebSocketClient) Publish(channel string, data interface{}) error {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+
+	if !wsc.connected {
+		return fmt.Errorf("WebSocket not connected")
 	}
 
-	messageID := uuid.New().String()
-	ackChan := make(chan AckResponse, 1)
-
-	c.acksMu.Lock()
-	c.pendingAcks[messageID] = ackChan
-	c.acksMu.Unlock()
-
-	defer func() {
-		c.acksMu.Lock()
-		delete(c.pendingAcks, messageID)
-		c.acksMu.Unlock()
-		close(ackChan)
-	}()
-
-	msg := OutgoingMessage{
+	msg := WebSocketMessage{
 		Action:    "publish",
 		Channel:   channel,
 		Data:      data,
-		MessageID: messageID,
+		MessageID: uuid.New().String(),
 	}
 
-	c.mu.Lock()
-	err := c.conn.WriteJSON(msg)
-	c.mu.Unlock()
-
-	if err != nil {
-		return "", fmt.Errorf("gagal publish: %w", err)
-	}
-
-	select {
-	case ack := <-ackChan:
-		if ack.Status == "error_ack" {
-			return "", fmt.Errorf("publish error: %s", ack.Error)
-		}
-		log.Printf("✅ Pesan berhasil di-publish ke %s (ID: %s)", channel, messageID)
-		return messageID, nil
-	case <-time.After(10 * time.Second):
-		return "", fmt.Errorf("timeout menunggu acknowledgment")
-	}
+	return wsc.conn.WriteJSON(msg)
 }
 
-func (c *WebSocketClient) PublishAsync(channel string, data interface{}) error {
-	if !c.isConnected {
-		return fmt.Errorf("WebSocket tidak terhubung")
+func (wsc *WebSocketClient) OnMessage(channel string, handler func(json.RawMessage)) {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+
+	if _, exists := wsc.messageHandlers[channel]; !exists {
+		wsc.messageHandlers[channel] = make([]func(json.RawMessage), 0)
 	}
 
-	messageID := uuid.New().String()
-	msg := OutgoingMessage{
-		Action:    "publish",
-		Channel:   channel,
-		Data:      data,
-		MessageID: messageID,
+	wsc.messageHandlers[channel] = append(wsc.messageHandlers[channel], handler)
+}
+
+func (wsc *WebSocketClient) Close() error {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+
+	if wsc.conn != nil {
+		wsc.connected = false
+		return wsc.conn.Close()
 	}
-
-	c.mu.Lock()
-	err := c.conn.WriteJSON(msg)
-	c.mu.Unlock()
-
-	if err != nil {
-		return fmt.Errorf("gagal publish async: %w", err)
-	}
-
-	log.Printf("📤 Pesan async di-publish ke %s", channel)
 	return nil
 }
 
-func (c *WebSocketClient) IsConnected() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.isConnected
-}
-
-func (c *WebSocketClient) Close() error {
-	close(c.stopChan)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.conn != nil {
-		return c.conn.Close()
-	}
-	return nil
+func (wsc *WebSocketClient) IsConnected() bool {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+	return wsc.connected
 }
