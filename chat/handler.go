@@ -384,14 +384,14 @@ func (h *ChatHandler) DeleteConversation(ctx *gin.Context) {
 	util.SuccessResponse(ctx, "Conversation deleted successfully", nil)
 }
 
+// chat/handler.go - Enhanced Ask handler
 func (h *ChatHandler) Ask(ctx *gin.Context) {
 	var req struct {
-		PlatformUniqueID string   `json:"platform_unique_id" binding:"required"`
-		Query            string   `json:"query" binding:"required"`
-		ConversationID   string   `json:"conversation_id"`
-		Platform         string   `json:"platform" binding:"required"`
-		Metatadata       Metadata `json:"metadata,omitempty"`
-		StartTimestamp   *int64   `json:"start_timestamp,omitempty"`
+		PlatformUniqueID string `json:"platform_unique_id" binding:"required"`
+		Query            string `json:"query" binding:"required"`
+		ConversationID   string `json:"conversation_id"`
+		Platform         string `json:"platform" binding:"required"`
+		StartTimestamp   string `json:"start_timestamp,omitempty"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -424,13 +424,16 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		}
 	}
 
+	// ===== ENHANCED: Handle helpdesk mode immediately =====
 	if conversation != nil && conversation.IsHelpdesk {
+		// Save user message to database
 		err := h.messageService.HandleHelpdeskMessage(
 			conversation.ID,
 			req.Query,
 			"user",
 			conversation.Platform,
 			&conversation.PlatformUniqueID,
+			req.StartTimestamp,
 		)
 
 		if err != nil {
@@ -439,138 +442,162 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			return
 		}
 
+		// Check if helpdesk record exists
+		existingHelpdesk, err := h.helpdeskService.GetBySessionID(conversation.ID.String())
+		if err != nil && err != sql.ErrNoRows {
+			log.Println("Error checking helpdesk:", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error get existing helpdesk")
+			return
+		}
+
+		// Create helpdesk record if doesn't exist
+		if existingHelpdesk == nil {
+			err = h.helpdeskService.Create(&helpdesk.Helpdesk{
+				SessionID:        conversation.ID.String(),
+				Platform:         conversation.Platform,
+				PlatformUniqueID: &conversation.PlatformUniqueID,
+				Status:           "queue",
+			})
+
+			if err != nil {
+				log.Println("Error creating helpdesk:", err)
+				util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating helpdesk")
+				return
+			}
+		}
+
+		// Return immediately - frontend will wait for WebSocket messages
 		responseAsk := ResponseAsk{
 			User:             req.PlatformUniqueID,
 			ConversationID:   conversation.ID.String(),
 			Query:            req.Query,
-			Answer:           "Pesan Anda telah dikirim ke agen. Mohon tunggu balasan.",
+			Answer:           "", // Empty answer - agent will respond via WebSocket
 			IsHelpdesk:       true,
 			Platform:         conversation.Platform,
 			PlatformUniqueID: conversation.PlatformUniqueID,
 		}
 
-		util.SuccessResponse(ctx, "Message sent to agent successfully", responseAsk)
+		util.SuccessResponse(ctx, "Message sent to agent queue", responseAsk)
 		return
-	} else {
-		chatReq := external.ChatRequest{
-			PlatformUniqueID: req.PlatformUniqueID,
-			Query:            req.Query,
-			ConversationID:   req.ConversationID,
-			Platform:         req.Platform,
-		}
-
-		resp, err := h.externalClient.SendChatMessage(chatReq)
-		if err != nil {
-			log.Println("Line 307", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-			return
-		}
-
-		conversationID, err := uuid.Parse(resp.ConversationID)
-		if err != nil {
-			log.Println("Line 314", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, "Invalid conversation ID from external API")
-			return
-		}
-
-		conversation, err = h.service.GetConversationByID(conversationID)
-		if err != nil {
-			conversation = &Conversation{
-				ID:               conversationID,
-				StartTimestamp:   time.Now(),
-				Platform:         req.Platform,
-				PlatformUniqueID: req.PlatformUniqueID,
-				IsHelpdesk:       resp.IsHelpdesk,
-				Context:          nil,
-			}
-			if err := h.service.CreateConversation(conversation); err != nil {
-				log.Println("Line 331", err)
-				util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating conversation")
-				return
-			}
-		}
-
-		channelName := conversationID.String()
-
-		var responseAnswer string
-		var responseCitations []string
-		var responseQuestionCategory []string
-
-		if resp.IsHelpdesk {
-			responseAnswer = "Halo! Kami sedang mencarikan agen terbaik untuk membantu Anda saat ini. Kami mohon kesediaan Anda untuk menunggu sebentar, ya"
-			responseCitations = []string{}
-			responseQuestionCategory = []string{}
-
-			existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)
-			if err != nil || existingHelpdesk == nil {
-				err = h.helpdeskService.Create(&helpdesk.Helpdesk{
-					SessionID:        resp.ConversationID,
-					Platform:         conversation.Platform,
-					PlatformUniqueID: &conversation.PlatformUniqueID,
-					Status:           "Queue",
-				})
-
-				if err != nil {
-					log.Printf("Error creating helpdesk: %v", err)
-				}
-			}
-		} else {
-			responseAnswer = resp.Answer
-			responseCitations = resp.Citations
-			responseQuestionCategory = resp.QuestionCategory
-		}
-
-		responseAsk := ResponseAsk{
-			User:             resp.User,
-			ConversationID:   resp.ConversationID,
-			Query:            resp.Query,
-			RewrittenQuery:   resp.RewrittenQuery,
-			Category:         resp.Category,
-			QuestionCategory: responseQuestionCategory,
-			Answer:           responseAnswer,
-			Citations:        responseCitations,
-			IsHelpdesk:       resp.IsHelpdesk,
-			IsAnswered:       resp.IsAnswered,
-			Platform:         conversation.Platform,
-			PlatformUniqueID: conversation.PlatformUniqueID,
-		}
-
-		if conversation.Platform == "web" {
-			if h.wsClient.IsConnected() {
-				publishData := map[string]interface{}{
-					"user":               resp.User,
-					"conversation_id":    resp.ConversationID,
-					"query":              resp.Query,
-					"rewritten_query":    resp.RewrittenQuery,
-					"category":           resp.Category,
-					"question_category":  responseQuestionCategory,
-					"answer":             responseAnswer,
-					"citations":          responseCitations,
-					"is_helpdesk":        resp.IsHelpdesk,
-					"is_answered":        resp.IsAnswered,
-					"platform":           conversation.Platform,
-					"platform_unique_id": conversation.PlatformUniqueID,
-					"timestamp":          time.Now().Unix(),
-				}
-
-				if err := h.wsClient.Publish(channelName, publishData); err != nil {
-					log.Printf("Failed to publish to channel %s: %v", channelName, err)
-				} else {
-					log.Printf("✅ Published message to channel: %s", channelName)
-				}
-			}
-		} else {
-			if conversation.Platform == "email" {
-				responseAsk.Metadata = req.Metatadata
-			}
-
-			err := h.externalClient.SendMessageToAPI(responseAsk)
-			if err != nil {
-				util.ErrorResponse(ctx, http.StatusInternalServerError, "Error send to Multi Channel API")
-			}
-		}
-		util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 	}
+	// ===== END ENHANCEMENT =====
+
+	// Regular bot flow continues here...
+	chatReq := external.ChatRequest{
+		PlatformUniqueID: req.PlatformUniqueID,
+		Query:            req.Query,
+		ConversationID:   req.ConversationID,
+		Platform:         req.Platform,
+		StartTimestamp:   req.StartTimestamp,
+	}
+
+	resp, err := h.externalClient.SendChatMessage(chatReq)
+	if err != nil {
+		log.Println("Line 307", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	conversationID, err := uuid.Parse(resp.ConversationID)
+	if err != nil {
+		log.Println("Line 314", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Invalid conversation ID from external API")
+		return
+	}
+
+	conversation, err = h.service.GetConversationByID(conversationID)
+	if err != nil {
+		conversation = &Conversation{
+			ID:               conversationID,
+			StartTimestamp:   time.Now(),
+			Platform:         req.Platform,
+			PlatformUniqueID: req.PlatformUniqueID,
+			IsHelpdesk:       resp.IsHelpdesk,
+			Context:          nil,
+		}
+		if err := h.service.CreateConversation(conversation); err != nil {
+			log.Println("Line 331", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating conversation")
+			return
+		}
+	}
+
+	channelName := conversationID.String()
+
+	var responseAnswer string
+	var responseCitations []string
+	var responseQuestionCategory []string
+
+	if resp.IsHelpdesk {
+		responseAnswer = "Pesan Anda telah dikirim ke agen. Mohon tunggu balasan."
+		responseCitations = []string{}
+		responseQuestionCategory = []string{}
+
+		existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)
+		if err != nil || existingHelpdesk == nil {
+			err = h.helpdeskService.Create(&helpdesk.Helpdesk{
+				SessionID:        resp.ConversationID,
+				Platform:         conversation.Platform,
+				PlatformUniqueID: &conversation.PlatformUniqueID,
+				Status:           "Queue",
+			})
+
+			if err != nil {
+				log.Printf("Error creating helpdesk: %v", err)
+			}
+		}
+	} else {
+		responseAnswer = resp.Answer
+		responseCitations = resp.Citations
+		responseQuestionCategory = resp.QuestionCategory
+	}
+
+	responseAsk := ResponseAsk{
+		User:             resp.User,
+		ConversationID:   resp.ConversationID,
+		Query:            resp.Query,
+		RewrittenQuery:   resp.RewrittenQuery,
+		Category:         resp.Category,
+		QuestionCategory: responseQuestionCategory,
+		Answer:           responseAnswer,
+		Citations:        responseCitations,
+		IsHelpdesk:       resp.IsHelpdesk,
+		IsAnswered:       resp.IsAnswered,
+		Platform:         conversation.Platform,
+		PlatformUniqueID: conversation.PlatformUniqueID,
+	}
+
+	if conversation.Platform == "web" {
+		if h.wsClient.IsConnected() {
+			publishData := map[string]interface{}{
+				"user":               resp.User,
+				"conversation_id":    resp.ConversationID,
+				"query":              resp.Query,
+				"rewritten_query":    resp.RewrittenQuery,
+				"category":           resp.Category,
+				"question_category":  responseQuestionCategory,
+				"answer":             responseAnswer,
+				"citations":          responseCitations,
+				"is_helpdesk":        resp.IsHelpdesk,
+				"is_answered":        resp.IsAnswered,
+				"platform":           conversation.Platform,
+				"platform_unique_id": conversation.PlatformUniqueID,
+				"timestamp":          time.Now().Unix(),
+			}
+
+			if err := h.wsClient.Publish(channelName, publishData); err != nil {
+				log.Printf("Failed to publish to channel %s: %v", channelName, err)
+			} else {
+				log.Printf("✅ Published message to channel: %s", channelName)
+			}
+		}
+	} else {
+		err := h.externalClient.SendMessageToAPI(responseAsk)
+		if err != nil {
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error send to Multi Channel API")
+		}
+	}
+	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 }
 
 func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
@@ -646,7 +673,7 @@ func (h *ChatHandler) DebugChatHistory(ctx *gin.Context) {
 	query := `
 		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
 			   category, feedback, question_category, question_sub_category, is_answered, revision
-		FROM bkpm.chat_history
+		FROM chat_history
 		WHERE session_id = $1
 		ORDER BY created_at ASC
 	`
@@ -675,7 +702,7 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		Question   string `json:"question" binding:"required"`
 		AnswerID   int    `json:"answer_id" binding:"required"`
 		Answer     string `json:"answer" binding:"required"`
-		Revision   string `json:"revision" binding:"required"`
+		Revision   string `json:"revision" `
 		Validate   bool   `json:"validate" binding:"required"`
 	}
 
@@ -683,6 +710,8 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
+	log.Println(req)
 
 	if req.Revision == "" {
 		req.Revision = req.Answer

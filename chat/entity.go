@@ -36,6 +36,7 @@ type ChatHistory struct {
 	IsAnswered          *bool     `db:"is_answered" json:"is_answered,omitempty"`
 	Revision            *string   `db:"revision" json:"revision,omitempty"`
 	IsValidated         *bool     `db:"is_validated" json:"is_validated"`
+	StartTimestamp      string    `db:"start_timestamp" json:"start_timestamp"`
 }
 
 type Metadata struct {
@@ -58,7 +59,6 @@ type ResponseAsk struct {
 	IsAnswered       *bool    `json:"is_answered"`
 	Platform         string   `json:"platform"`
 	PlatformUniqueID string   `json:"platform_unique_id"`
-	Metadata         Metadata `json:"metadata,omitempty"`
 }
 
 type ChatPair struct {

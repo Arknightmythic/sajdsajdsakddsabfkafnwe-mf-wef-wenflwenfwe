@@ -26,20 +26,20 @@ func NewMessageService(db *sqlx.DB, wsURL, wsToken string, externalClient *exter
 	}
 }
 
-func (s *MessageService) CreateChatHistory(sessionID uuid.UUID, messageData map[string]interface{}) (int, error) {
+func (s *MessageService) CreateChatHistory(sessionID uuid.UUID, messageData map[string]interface{}, startTimestamp string) (int, error) {
 	messageJSON, err := json.Marshal(messageData)
 	if err != nil {
 		return 0, fmt.Errorf("failed to marshal message data: %w", err)
 	}
 
 	query := `
-		INSERT INTO chat_history (session_id, message)
-		VALUES ($1, $2::jsonb)
+		INSERT INTO chat_history (session_id, message, start_timestamp)
+		VALUES ($1, $2::jsonb, $3)
 		RETURNING id
 	`
 
 	var id int
-	err = s.db.QueryRow(query, sessionID, messageJSON).Scan(&id)
+	err = s.db.QueryRow(query, sessionID, messageJSON, startTimestamp).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert chat history: %w", err)
 	}
@@ -47,7 +47,7 @@ func (s *MessageService) CreateChatHistory(sessionID uuid.UUID, messageData map[
 	return id, nil
 }
 
-func (s *MessageService) CreateUserMessage(sessionID uuid.UUID, content string) (map[string]interface{}, int, error) {
+func (s *MessageService) CreateUserMessage(sessionID uuid.UUID, content string, startTimestamp string) (map[string]interface{}, int, error) {
 	messageData := map[string]interface{}{
 		"data": map[string]interface{}{
 			"id":                nil,
@@ -60,11 +60,11 @@ func (s *MessageService) CreateUserMessage(sessionID uuid.UUID, content string) 
 		"type": "human",
 	}
 
-	id, err := s.CreateChatHistory(sessionID, messageData)
+	id, err := s.CreateChatHistory(sessionID, messageData, startTimestamp)
 	return messageData, id, err
 }
 
-func (s *MessageService) CreateAgentMessage(sessionID uuid.UUID, content string) (map[string]interface{}, int, error) {
+func (s *MessageService) CreateAgentMessage(sessionID uuid.UUID, content string, startTimestamp string) (map[string]interface{}, int, error) {
 	messageData := map[string]interface{}{
 		"data": map[string]interface{}{
 			"id":                 nil,
@@ -80,7 +80,7 @@ func (s *MessageService) CreateAgentMessage(sessionID uuid.UUID, content string)
 		"type": "ai",
 	}
 
-	id, err := s.CreateChatHistory(sessionID, messageData)
+	id, err := s.CreateChatHistory(sessionID, messageData, startTimestamp)
 	return messageData, id, err
 }
 
@@ -112,15 +112,15 @@ type HelpdeskMessageResponse struct {
 	Metadata         interface{} `json:"metadata,omitempty"`
 }
 
-func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message string, userType string, platform string, platformUniqueID *string) error {
+func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message string, userType string, platform string, platformUniqueID *string, startTimestamp string) error {
 	var chatHistoryID int
 	var err error
 
 	switch userType {
 	case "user":
-		_, chatHistoryID, err = s.CreateUserMessage(sessionID, message)
+		_, chatHistoryID, err = s.CreateUserMessage(sessionID, message, startTimestamp)
 	case "agent":
-		_, chatHistoryID, err = s.CreateAgentMessage(sessionID, message)
+		_, chatHistoryID, err = s.CreateAgentMessage(sessionID, message, startTimestamp)
 	default:
 		return fmt.Errorf("invalid user_type: %s", userType)
 	}
