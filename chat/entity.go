@@ -34,8 +34,15 @@ type ChatHistory struct {
 	QuestionCategory    *string   `db:"question_category" json:"question_category,omitempty"`
 	QuestionSubCategory *string   `db:"question_sub_category" json:"question_sub_category,omitempty"`
 	IsAnswered          *bool     `db:"is_answered" json:"is_answered,omitempty"`
-	Revision            *string      `db:"revision" json:"revision,omitempty"`
+	Revision            *string   `db:"revision" json:"revision,omitempty"`
 	IsValidated         *bool     `db:"is_validated" json:"is_validated"`
+}
+
+type Metadata struct {
+	Subject    string `json:"subject"`
+	InReplyTo  string `json:"in_reply_to"`
+	References string `json:"references"`
+	ThreadKey  string `json:"thread_key"`
 }
 
 type ResponseAsk struct {
@@ -51,6 +58,7 @@ type ResponseAsk struct {
 	IsAnswered       *bool    `json:"is_answered"`
 	Platform         string   `json:"platform"`
 	PlatformUniqueID string   `json:"platform_unique_id"`
+	Metadata         Metadata `json:"metadata,omitempty"`
 }
 
 type ChatPair struct {
@@ -118,11 +126,11 @@ type ChatHistoryFilter struct {
 }
 
 type ConversationFilter struct {
-	SortBy        string
-	SortDirection string
-	StartDate     *time.Time
-	EndDate       *time.Time
-	Limit         int
-	Offset        int
+	SortBy           string
+	SortDirection    string
+	StartDate        *time.Time
+	EndDate          *time.Time
+	Limit            int
+	Offset           int
 	PlatformUniqueID *string
 }

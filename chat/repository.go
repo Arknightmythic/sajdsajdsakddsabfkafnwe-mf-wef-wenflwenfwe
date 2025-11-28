@@ -321,7 +321,7 @@ func (r *ChatRepository) GetConversationByID(id uuid.UUID) (*Conversation, error
 			 category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
 		 FROM chat_history
 		 WHERE session_id = $1
-		 ORDER BY created_at ASC
+		 ORDER BY id ASC
 	`
 	err = r.db.Select(&histories, historyQuery, conv.ID)
 	if err == nil {
@@ -393,37 +393,39 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 	argIdx := 1
 
 	if sessionID != nil {
-		conditions = append(conditions, fmt.Sprintf("session_id = $%d", argIdx))
+		conditions = append(conditions, fmt.Sprintf("ch.session_id = $%d", argIdx))
 		args = append(args, *sessionID)
 		argIdx++
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argIdx))
+		conditions = append(conditions, fmt.Sprintf("ch.created_at >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
 		argIdx++
 	}
 
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", argIdx))
+		conditions = append(conditions, fmt.Sprintf("ch.created_at <= $%d", argIdx))
 		args = append(args, *filter.EndDate)
 		argIdx++
 	}
+
+	conditions = append(conditions, "c.is_helpdesk = false")
 
 	where := ""
 	if len(conditions) > 0 {
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	order := "ORDER BY session_id, created_at ASC"
+	orderAndSort := "ORDER BY ch.session_id ASC, ch.created_at ASC, ch.id ASC"
 
 	query := fmt.Sprintf(`
-			  SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
-				  category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
-			  FROM chat_history
+			  SELECT ch.id, ch.session_id, ch.message, ch.created_at, ch.user_id, ch.is_cannot_answer,
+				  ch.category, ch.feedback, ch.question_category, ch.question_sub_category, ch.is_answered, ch.revision, ch.is_validated
+			  FROM chat_history ch JOIN conversations c ON ch.session_id = c.id
 			  %s
 			  %s
-		 `, where, order)
+		 `, where, orderAndSort)
 
 	if err := r.db.Select(&histories, query, args...); err != nil {
 		return nil, 0, err
@@ -493,7 +495,6 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 
 			pairs = append(pairs, pair)
 		} else {
-
 			i--
 		}
 	}
@@ -595,4 +596,28 @@ func (r *ChatRepository) UpdateIsAnsweredStatus(questionID, answerID int, revisi
 	}
 
 	return tx.Commit()
+}
+
+func (r *ChatRepository) GetHelpdeskMessages(sessionID uuid.UUID, limit, offset int) ([]ChatHistory, int, error) {
+	var total int
+	countQuery := `SELECT COUNT(*) FROM chat_history WHERE session_id = $1`
+	if err := r.db.Get(&total, countQuery, sessionID); err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+			category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
+		FROM chat_history
+		WHERE session_id = $1
+		ORDER BY created_at ASC
+		LIMIT $2 OFFSET $3
+	`
+
+	var histories []ChatHistory
+	if err := r.db.Select(&histories, query, sessionID, limit, offset); err != nil {
+		return nil, 0, err
+	}
+
+	return histories, total, nil
 }

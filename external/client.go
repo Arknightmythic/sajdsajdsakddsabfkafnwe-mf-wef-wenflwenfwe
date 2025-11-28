@@ -50,9 +50,22 @@ type FlexibleStringArray []string
 
 func (f *FlexibleStringArray) UnmarshalJSON(data []byte) error {
 
-	var arr []string
+	var arr [][]interface{}
 	if err := json.Unmarshal(data, &arr); err == nil {
-		*f = arr
+		*f = make([]string, 0, len(arr))
+		for _, item := range arr {
+			if len(item) >= 2 {
+
+				filename := fmt.Sprintf("%v", item[1])
+				*f = append(*f, filename)
+			}
+		}
+		return nil
+	}
+
+	var strArr []string
+	if err := json.Unmarshal(data, &strArr); err == nil {
+		*f = strArr
 		return nil
 	}
 
@@ -223,7 +236,7 @@ type MessageAPIRequest struct {
 }
 
 func (c *Client) SendMessageToAPI(data interface{}) error {
-	url := c.messagesURL + "/api/messages"
+	url := c.messagesURL + "/api/send/reply"
 
 	requestBody := MessageAPIRequest{
 		Status:  "success",
