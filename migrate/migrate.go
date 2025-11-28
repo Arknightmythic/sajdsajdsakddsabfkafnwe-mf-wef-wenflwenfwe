@@ -133,7 +133,7 @@ func RunMigrations(db *sqlx.DB) {
         session_id UUID NOT NULL REFERENCES conversations(id),
         platform VARCHAR(50) NOT NULL,
         platform_unique_id VARCHAR(100),
-        user_id INT NOT NULL REFERENCES users(id),
+        user_id INT NULL,
         status VARCHAR(50) NULL,
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
     );

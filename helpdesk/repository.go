@@ -1,6 +1,7 @@
 package helpdesk
 
 import (
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -93,4 +94,14 @@ func (r *HelpdeskRepository) GetBySessionID(sessionID string) (*Helpdesk, error)
 		return nil, err
 	}
 	return &helpdesk, nil
+}
+
+func (r *HelpdeskRepository) SolvedConversation(id uuid.UUID) error {
+	_, err := r.db.Exec(`UPDATE helpdesk SET status = $1 WHERE session_id = $2`, "resolved", id)
+	return err
+}
+
+func (r *HelpdeskRepository) EndTimestampConversation(id uuid.UUID, endTimestamp string) error {
+	_, err := r.db.Exec(`UPDATE conversations SET end_timestamp = $1 WHERE id = $2`, endTimestamp, id)
+	return err
 }

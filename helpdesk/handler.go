@@ -230,3 +230,18 @@ func (h *HelpdeskHandler) AskHelpdesk(ctx *gin.Context) {
 		"user_type":  req.UserType,
 	})
 }
+
+func (h *HelpdeskHandler) SolvedConversation(ctx *gin.Context) {
+	id, err := uuid.Parse(ctx.Param("id"))
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid conversation ID")
+		return
+	}
+
+	if err := h.service.SolvedConversation(id); err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Conversation successfully solved", nil)
+}
