@@ -49,6 +49,7 @@ func (s *AzureService) GetAuthURL() (string, string, error) {
 	params.Add("response_mode", "query")
 	params.Add("scope", strings.Join(s.Config.Scope, " "))
 	params.Add("state", state)
+	params.Add("prompt", "select_account")
 
 	authURL := fmt.Sprintf("%s?%s", s.Config.AuthorizationURL, params.Encode())
 	return authURL, state, nil
