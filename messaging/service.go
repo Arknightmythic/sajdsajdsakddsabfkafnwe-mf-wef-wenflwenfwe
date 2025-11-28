@@ -101,7 +101,6 @@ func (s *MessageService) PublishToChannel(channel string, data map[string]interf
 	return nil
 }
 
-// HelpdeskMessageResponse represents the structure for external API response
 type HelpdeskMessageResponse struct {
 	User             string      `json:"user"`
 	ConversationID   string      `json:"conversation_id"`
@@ -117,7 +116,6 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 	var chatHistoryID int
 	var err error
 
-	// Create chat history based on user type
 	switch userType {
 	case "user":
 		_, chatHistoryID, err = s.CreateUserMessage(sessionID, message)
@@ -133,7 +131,6 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 
 	log.Printf("💾 Saved message to database with ID: %d", chatHistoryID)
 
-	// Create unique message ID for deduplication on frontend
 	messageUID := fmt.Sprintf("%s-%s-%d", sessionID.String(), userType, chatHistoryID)
 
 	publishData := map[string]interface{}{
@@ -147,12 +144,10 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 		"platform_unique_id": platformUniqueID,
 	}
 
-	// If platform is "web", publish to WebSocket channels
 	if platform == "web" {
 		mainChannel := sessionID.String()
 		agentChannel := sessionID.String() + "-agent"
 
-		// Always publish to both channels regardless of who sent the message
 		if err := s.PublishToChannel(mainChannel, publishData); err != nil {
 			log.Printf("Failed to publish to main channel: %v", err)
 		}
@@ -163,9 +158,9 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 
 		log.Printf("✅ Published to both channels: %s and %s", mainChannel, agentChannel)
 	} else {
-		// If platform is not "web" AND userType is "agent", send via external API
+
 		if userType == "agent" {
-			// Determine user identifier
+
 			userID := sessionID.String()
 			if platformUniqueID != nil && *platformUniqueID != "" {
 				userID = *platformUniqueID
@@ -188,7 +183,7 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 
 			log.Printf("✅ Sent agent message to external API for platform: %s", platform)
 		} else {
-			// For user messages on non-web platforms, still log to WebSocket for agent monitoring
+
 			agentChannel := sessionID.String() + "-agent"
 			if err := s.PublishToChannel(agentChannel, publishData); err != nil {
 				log.Printf("Failed to publish user message to agent channel: %v", err)

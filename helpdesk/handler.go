@@ -112,7 +112,6 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 		return
 	}
 
-	// Check if only status is being updated
 	if len(req) == 1 && req["status"] != nil {
 		status, ok := req["status"].(string)
 		if !ok {
@@ -125,7 +124,6 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 			return
 		}
 
-		// Fetch updated helpdesk
 		helpdesk, err := h.service.GetByID(id)
 		if err != nil {
 			util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
@@ -136,7 +134,6 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 		return
 	}
 
-	// Full update
 	var fullReq struct {
 		SessionID        string  `json:"session_id"`
 		Platform         string  `json:"platform"`
@@ -145,7 +142,6 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 		UserID           int     `json:"user_id"`
 	}
 
-	// Re-bind to structured request
 	if err := ctx.ShouldBindJSON(&fullReq); err != nil {
 		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
 		return
@@ -165,7 +161,6 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 		return
 	}
 
-	// Fetch updated helpdesk
 	updatedHelpdesk, err := h.service.GetByID(id)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
@@ -194,7 +189,7 @@ func (h *HelpdeskHandler) AskHelpdesk(ctx *gin.Context) {
 	var req struct {
 		SessionID string `json:"session_id" binding:"required"`
 		Message   string `json:"message" binding:"required"`
-		UserType  string `json:"user_type" binding:"required"` // "user" or "agent"
+		UserType  string `json:"user_type" binding:"required"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -208,14 +203,12 @@ func (h *HelpdeskHandler) AskHelpdesk(ctx *gin.Context) {
 		return
 	}
 
-	// Verify helpdesk exists
 	helpdesk, err := h.service.GetBySessionID(req.SessionID)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusNotFound, "Helpdesk session not found")
 		return
 	}
 
-	// Handle message through messaging service
 	err = h.messageService.HandleHelpdeskMessage(
 		sessionID,
 		req.Message,
