@@ -1,5 +1,11 @@
 package helpdesk
 
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
 type HelpdeskService struct {
 	repo *HelpdeskRepository
 }
@@ -44,4 +50,23 @@ func (s *HelpdeskService) Delete(id int) error {
 
 func (s *HelpdeskService) GetBySessionID(sessionID string) (*Helpdesk, error) {
 	return s.repo.GetBySessionID(sessionID)
+}
+
+func (s *HelpdeskService) SolvedConversation(id uuid.UUID) error {
+	const customLayout = "2006-01-02 15:04:05.000"
+	now := time.Now()
+	formattedTime := now.Format(customLayout)
+
+	err := s.repo.SolvedConversation(id)
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.EndTimestampConversation(id, formattedTime)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
