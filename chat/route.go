@@ -3,7 +3,10 @@ package chat
 import (
 	"dokuprime-be/config"
 	"dokuprime-be/external"
+	"dokuprime-be/helpdesk"
+	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -16,12 +19,25 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	externalAPIConfig := config.LoadExternalAPIConfig()
 	externalClient := external.NewClient(externalAPIConfig)
 
-	handler := NewChatHandler(service, externalClient)
+	helpdeskService := helpdesk.NewHelpdeskService(helpdesk.NewHelpdeskRepository(db))
+
+	wsURL := os.Getenv("WEBSOCKET_URL")
+	if wsURL == "" {
+		wsURL = "ws://localhost:8080"
+	}
+
+	wsToken := os.Getenv("WEBSOCKET_SECRET_KEY")
+	if wsToken == "" {
+		wsToken = "bkpm-jaya-jaya-jaya"
+	}
+
+	messageService := messaging.NewMessageService(db, wsURL, wsToken, externalClient)
+
+	handler := NewChatHandler(service, externalClient, wsURL, wsToken, *helpdeskService, *messageService)
 
 	chatRoutes := r.Group("/api/chat")
 	chatRoutes.Use(middleware.AuthMiddleware())
 	{
-
 		chatRoutes.POST("/history", handler.CreateChatHistory)
 		chatRoutes.GET("/history", handler.GetChatHistories)
 		chatRoutes.GET("/history/:id", handler.GetChatHistoryByID)
@@ -41,7 +57,6 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 		chatRoutes.POST("/ask", handler.Ask)
 		chatRoutes.POST("/validate", handler.ValidateAnswer)
-
 	}
 
 	apiKeyRoutes := r.Group("/api/chat/multichannel")

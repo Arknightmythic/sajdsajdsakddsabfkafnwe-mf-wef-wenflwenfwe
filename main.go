@@ -8,6 +8,7 @@ import (
 	"dokuprime-be/document"
 	"dokuprime-be/grafana"
 	"dokuprime-be/guide"
+	"dokuprime-be/helpdesk"
 	"dokuprime-be/migrate"
 	"dokuprime-be/permission"
 	"dokuprime-be/role"
@@ -65,6 +66,7 @@ func main() {
 	grafana.RegisterRoutes(r, redisClient)
 	guide.RegisterRoutes(r, db, redisClient)
 	chat.RegisterRoutes(r, db)
+	helpdesk.RegisterRoutes(r, db)
 	asyncProcessor := document.RegisterRoutesWithProcessor(r, db, redisClient)
 	azure.RegisterRoutes(r, db, redisClient)
 

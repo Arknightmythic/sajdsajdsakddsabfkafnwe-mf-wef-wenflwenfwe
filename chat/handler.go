@@ -1,7 +1,11 @@
 package chat
 
 import (
+	"database/sql"
+	"dokuprime-be/config"
 	"dokuprime-be/external"
+	"dokuprime-be/helpdesk"
+	"dokuprime-be/messaging"
 	"dokuprime-be/util"
 	"fmt"
 	"log"
@@ -16,15 +20,27 @@ import (
 )
 
 type ChatHandler struct {
-	service        *ChatService
-	externalClient *external.Client
+	service         *ChatService
+	externalClient  *external.Client
+	wsClient        *config.WebSocketClient
+	helpdeskService helpdesk.HelpdeskService
+	messageService  messaging.MessageService
 }
 
-func NewChatHandler(service *ChatService, externalClient *external.Client) *ChatHandler {
-	return &ChatHandler{
-		service:        service,
-		externalClient: externalClient,
+func NewChatHandler(service *ChatService, externalClient *external.Client, wsURL, wsToken string, helpdeskService helpdesk.HelpdeskService, messageService messaging.MessageService) *ChatHandler {
+	handler := &ChatHandler{
+		service:         service,
+		externalClient:  externalClient,
+		wsClient:        config.NewWebSocketClient(wsURL, wsToken),
+		helpdeskService: helpdeskService,
+		messageService:  messageService,
 	}
+
+	if err := handler.wsClient.Connect(); err != nil {
+		log.Printf("Failed to connect to WebSocket: %v", err)
+	}
+
+	return handler
 }
 
 func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
@@ -370,10 +386,12 @@ func (h *ChatHandler) DeleteConversation(ctx *gin.Context) {
 
 func (h *ChatHandler) Ask(ctx *gin.Context) {
 	var req struct {
-		PlatformUniqueID string `json:"platform_unique_id" binding:"required"`
-		Query            string `json:"query" binding:"required"`
-		ConversationID   string `json:"conversation_id"`
-		Platform         string `json:"platform" binding:"required"`
+		PlatformUniqueID string   `json:"platform_unique_id" binding:"required"`
+		Query            string   `json:"query" binding:"required"`
+		ConversationID   string   `json:"conversation_id"`
+		Platform         string   `json:"platform" binding:"required"`
+		Metatadata       Metadata `json:"metadata,omitempty"`
+		StartTimestamp   *int64   `json:"start_timestamp,omitempty"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -382,61 +400,177 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		return
 	}
 
-	chatReq := external.ChatRequest{
-		PlatformUniqueID: req.PlatformUniqueID,
-		Query:            req.Query,
-		ConversationID:   req.ConversationID,
-		Platform:         req.Platform,
-	}
-
-	resp, err := h.externalClient.SendChatMessage(chatReq)
-	if err != nil {
-		log.Println("Line 307", err)
-		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	conversationID, err := uuid.Parse(resp.ConversationID)
-	if err != nil {
-		log.Println("Line 314", err)
-		util.ErrorResponse(ctx, http.StatusInternalServerError, "Invalid conversation ID from external API")
-		return
-	}
-
-	conv, err := h.service.GetConversationByID(conversationID)
-	if err != nil {
-
-		conv = &Conversation{
-			ID:               conversationID,
-			StartTimestamp:   time.Now(),
-			Platform:         req.Platform,
-			PlatformUniqueID: req.PlatformUniqueID,
-			IsHelpdesk:       resp.IsHelpdesk,
-			Context:          nil,
+	if !h.wsClient.IsConnected() {
+		log.Println("WebSocket not connected, attempting to reconnect...")
+		if err := h.wsClient.Connect(); err != nil {
+			log.Printf("Failed to connect to WebSocket: %v", err)
 		}
-		if err := h.service.CreateConversation(conv); err != nil {
-			log.Println("Line 331", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error")
+	}
+
+	var conversation *Conversation
+
+	if req.ConversationID != "" {
+		parsedUUID, err := uuid.Parse(req.ConversationID)
+		if err != nil {
+			util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid uuid format")
+			return
+		}
+
+		conversation, err = h.service.GetConversationByID(parsedUUID)
+		if err != nil && err != sql.ErrNoRows {
+			log.Println(err)
+			util.ErrorResponse(ctx, http.StatusBadRequest, "Error fetching conversation")
 			return
 		}
 	}
 
-	responseAsk := ResponseAsk{
-		User:             resp.User,
-		ConversationID:   resp.ConversationID,
-		Query:            resp.Query,
-		RewrittenQuery:   resp.RewrittenQuery,
-		Category:         resp.Category,
-		QuestionCategory: resp.QuestionCategory,
-		Answer:           resp.Answer,
-		Citations:        resp.Citations,
-		IsHelpdesk:       resp.IsHelpdesk,
-		IsAnswered:       resp.IsAnswered,
-		Platform:         conv.Platform,
-		PlatformUniqueID: conv.PlatformUniqueID,
-	}
+	if conversation != nil && conversation.IsHelpdesk {
+		err := h.messageService.HandleHelpdeskMessage(
+			conversation.ID,
+			req.Query,
+			"user",
+			conversation.Platform,
+			&conversation.PlatformUniqueID,
+		)
 
-	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
+		if err != nil {
+			log.Println("Error handling helpdesk message:", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error sending message")
+			return
+		}
+
+		responseAsk := ResponseAsk{
+			User:             req.PlatformUniqueID,
+			ConversationID:   conversation.ID.String(),
+			Query:            req.Query,
+			Answer:           "Pesan Anda telah dikirim ke agen. Mohon tunggu balasan.",
+			IsHelpdesk:       true,
+			Platform:         conversation.Platform,
+			PlatformUniqueID: conversation.PlatformUniqueID,
+		}
+
+		util.SuccessResponse(ctx, "Message sent to agent successfully", responseAsk)
+		return
+	} else {
+		chatReq := external.ChatRequest{
+			PlatformUniqueID: req.PlatformUniqueID,
+			Query:            req.Query,
+			ConversationID:   req.ConversationID,
+			Platform:         req.Platform,
+		}
+
+		resp, err := h.externalClient.SendChatMessage(chatReq)
+		if err != nil {
+			log.Println("Line 307", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		conversationID, err := uuid.Parse(resp.ConversationID)
+		if err != nil {
+			log.Println("Line 314", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Invalid conversation ID from external API")
+			return
+		}
+
+		conversation, err = h.service.GetConversationByID(conversationID)
+		if err != nil {
+			conversation = &Conversation{
+				ID:               conversationID,
+				StartTimestamp:   time.Now(),
+				Platform:         req.Platform,
+				PlatformUniqueID: req.PlatformUniqueID,
+				IsHelpdesk:       resp.IsHelpdesk,
+				Context:          nil,
+			}
+			if err := h.service.CreateConversation(conversation); err != nil {
+				log.Println("Line 331", err)
+				util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating conversation")
+				return
+			}
+		}
+
+		channelName := conversationID.String()
+
+		var responseAnswer string
+		var responseCitations []string
+		var responseQuestionCategory []string
+
+		if resp.IsHelpdesk {
+			responseAnswer = "Halo! Kami sedang mencarikan agen terbaik untuk membantu Anda saat ini. Kami mohon kesediaan Anda untuk menunggu sebentar, ya"
+			responseCitations = []string{}
+			responseQuestionCategory = []string{}
+
+			existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)
+			if err != nil || existingHelpdesk == nil {
+				err = h.helpdeskService.Create(&helpdesk.Helpdesk{
+					SessionID:        resp.ConversationID,
+					Platform:         conversation.Platform,
+					PlatformUniqueID: &conversation.PlatformUniqueID,
+					Status:           "Queue",
+				})
+
+				if err != nil {
+					log.Printf("Error creating helpdesk: %v", err)
+				}
+			}
+		} else {
+			responseAnswer = resp.Answer
+			responseCitations = resp.Citations
+			responseQuestionCategory = resp.QuestionCategory
+		}
+
+		responseAsk := ResponseAsk{
+			User:             resp.User,
+			ConversationID:   resp.ConversationID,
+			Query:            resp.Query,
+			RewrittenQuery:   resp.RewrittenQuery,
+			Category:         resp.Category,
+			QuestionCategory: responseQuestionCategory,
+			Answer:           responseAnswer,
+			Citations:        responseCitations,
+			IsHelpdesk:       resp.IsHelpdesk,
+			IsAnswered:       resp.IsAnswered,
+			Platform:         conversation.Platform,
+			PlatformUniqueID: conversation.PlatformUniqueID,
+		}
+
+		if conversation.Platform == "web" {
+			if h.wsClient.IsConnected() {
+				publishData := map[string]interface{}{
+					"user":               resp.User,
+					"conversation_id":    resp.ConversationID,
+					"query":              resp.Query,
+					"rewritten_query":    resp.RewrittenQuery,
+					"category":           resp.Category,
+					"question_category":  responseQuestionCategory,
+					"answer":             responseAnswer,
+					"citations":          responseCitations,
+					"is_helpdesk":        resp.IsHelpdesk,
+					"is_answered":        resp.IsAnswered,
+					"platform":           conversation.Platform,
+					"platform_unique_id": conversation.PlatformUniqueID,
+					"timestamp":          time.Now().Unix(),
+				}
+
+				if err := h.wsClient.Publish(channelName, publishData); err != nil {
+					log.Printf("Failed to publish to channel %s: %v", channelName, err)
+				} else {
+					log.Printf("✅ Published message to channel: %s", channelName)
+				}
+			}
+		} else {
+			if conversation.Platform == "email" {
+				responseAsk.Metadata = req.Metatadata
+			}
+
+			err := h.externalClient.SendMessageToAPI(responseAsk)
+			if err != nil {
+				util.ErrorResponse(ctx, http.StatusInternalServerError, "Error send to Multi Channel API")
+			}
+		}
+		util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
+	}
 }
 
 func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
@@ -580,7 +714,6 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 
 		if err := h.externalClient.ExtractDocument(extractReq); err != nil {
 			log.Println("Error extracting document:", err)
-
 			os.Remove(tempFilePath)
 			util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to upload document to external API")
 			return
@@ -628,4 +761,8 @@ func parseDateRange(startDateStr, endDateStr string) (*time.Time, *time.Time, er
 	}
 
 	return startDatePtr, endDatePtr, nil
+}
+
+func (h *ChatHandler) Close() error {
+	return h.wsClient.Close()
 }

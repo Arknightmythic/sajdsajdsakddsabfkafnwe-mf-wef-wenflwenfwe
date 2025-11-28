@@ -537,7 +537,6 @@ func (s *DocumentService) BatchDeleteDocuments(ids []int) (int, []string) {
 	var errorMessages []string
 
 	for _, id := range ids {
-		// Panggil fungsi DeleteDocument yang sudah ada (ini sudah handle DB + External/Qdrant + File)
 		err := s.DeleteDocument(id)
 		if err != nil {
 			log.Printf("Batch Delete: Failed to delete document ID %d: %v", id, err)
