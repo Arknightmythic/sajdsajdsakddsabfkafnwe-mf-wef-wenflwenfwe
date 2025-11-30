@@ -94,6 +94,8 @@ type ChatResponse struct {
 	Citations        FlexibleStringArray `json:"citations"`
 	IsHelpdesk       bool                `json:"is_helpdesk"`
 	IsAnswered       *bool               `json:"is_answered"`
+	QuestionID       int                 `json:"question_id"`
+	AnswerID         int                 `json:"answer_id"`
 }
 
 func (c *Client) ExtractDocument(req ExtractRequest) error {

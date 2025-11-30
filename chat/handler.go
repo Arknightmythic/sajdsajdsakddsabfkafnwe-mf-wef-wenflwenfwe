@@ -565,6 +565,8 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		IsAnswered:       resp.IsAnswered,
 		Platform:         conversation.Platform,
 		PlatformUniqueID: conversation.PlatformUniqueID,
+		QuestionID:       resp.QuestionID,
+		AnswerID:         resp.AnswerID,
 	}
 
 	if conversation.Platform == "web" {
@@ -583,6 +585,8 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 				"platform":           conversation.Platform,
 				"platform_unique_id": conversation.PlatformUniqueID,
 				"timestamp":          time.Now().Unix(),
+				"question_id":        resp.QuestionID,
+				"answer_id":          resp.AnswerID,
 			}
 
 			if err := h.wsClient.Publish(channelName, publishData); err != nil {
@@ -711,8 +715,6 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		return
 	}
 
-	log.Println(req)
-
 	if req.Revision == "" {
 		req.Revision = req.Answer
 	}
@@ -791,6 +793,28 @@ func parseDateRange(startDateStr, endDateStr string) (*time.Time, *time.Time, er
 	}
 
 	return startDatePtr, endDatePtr, nil
+}
+
+func (h *ChatHandler) Feedback(ctx *gin.Context) {
+	var req struct {
+		AnswerID  int       `json:"answer_id,omitempty"`
+		SessionID uuid.UUID `json:"session_id,omitempty"`
+		Feedback  bool      `json:"feedback,omitempty"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	err := h.service.Feedback(req.AnswerID, req.SessionID, req.Feedback)
+	if err != nil {
+		log.Println("Error updating feedback status:", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to update feedback status")
+		return
+	}
+
+	util.SuccessResponse(ctx, "Feedback updated successfully", nil)
 }
 
 func (h *ChatHandler) Close() error {
