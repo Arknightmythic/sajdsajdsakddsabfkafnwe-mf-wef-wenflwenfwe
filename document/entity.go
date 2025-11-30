@@ -20,6 +20,7 @@ type DocumentDetail struct {
 	IsApprove    *bool     `db:"is_approve" json:"is_approve"`
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 	Category     string    `db:"category" json:"category"`
+	IngestStatus *string   `db:"ingest_status" json:"ingest_status"`
 }
 
 type DocumentWithDetail struct {
@@ -34,6 +35,7 @@ type DocumentWithDetail struct {
 	IsLatest     *bool     `db:"is_latest" json:"is_latest"`
 	IsApprove    *bool     `db:"is_approve" json:"is_approve"`
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	IngestStatus *string   `db:"ingest_status" json:"ingest_status"`
 }
 
 type DocumentFilter struct {
@@ -47,6 +49,7 @@ type DocumentFilter struct {
 	SortDirection string
 	StartDate     *time.Time
 	EndDate       *time.Time
+	IngestStatus  string
 }
 
 type DocumentDetailFilter struct {

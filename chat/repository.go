@@ -387,17 +387,25 @@ func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniq
 }
 
 func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]ChatPair, int, error) {
-	var histories []ChatHistory
+	
+	type ChatHistoryWithPlatform struct {
+		ChatHistory
+		PlatformUniqueID string `db:"platform_unique_id"`
+	}
+
+	var histories []ChatHistoryWithPlatform
 	var conditions []string
 	var args []interface{}
 	argIdx := 1
 
+	
 	if sessionID != nil {
 		conditions = append(conditions, fmt.Sprintf("ch.session_id = $%d", argIdx))
 		args = append(args, *sessionID)
 		argIdx++
 	}
 
+	
 	if filter.StartDate != nil {
 		conditions = append(conditions, fmt.Sprintf("ch.created_at >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
@@ -410,39 +418,57 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 		argIdx++
 	}
 
+	
+	if filter.Search != "" {
+		searchPattern := "%" + filter.Search + "%"
+		
+		conditions = append(conditions, fmt.Sprintf("(c.platform_unique_id ILIKE $%d OR ch.message::text ILIKE $%d)", argIdx, argIdx))
+		args = append(args, searchPattern)
+		argIdx++
+	}
+
+	
 	conditions = append(conditions, "c.is_helpdesk = false")
 
+	
 	where := ""
 	if len(conditions) > 0 {
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
+	
 	orderAndSort := "ORDER BY ch.session_id ASC, ch.created_at ASC, ch.id ASC"
 
+	
 	query := fmt.Sprintf(`
-			  SELECT ch.id, ch.session_id, ch.message, ch.created_at, ch.user_id, ch.is_cannot_answer,
-				  ch.category, ch.feedback, ch.question_category, ch.question_sub_category, ch.is_answered, ch.revision, ch.is_validated
-			  FROM chat_history ch JOIN conversations c ON ch.session_id = c.id
-			  %s
-			  %s
-		 `, where, orderAndSort)
+		SELECT ch.id, ch.session_id, ch.message, ch.created_at, ch.user_id, ch.is_cannot_answer,
+			ch.category, ch.feedback, ch.question_category, ch.question_sub_category, ch.is_answered, 
+			ch.revision, ch.is_validated, 
+			c.platform_unique_id -- [BARU] Kolom tambahan
+		FROM chat_history ch 
+		JOIN conversations c ON ch.session_id = c.id
+		%s
+		%s
+	`, where, orderAndSort)
 
 	if err := r.db.Select(&histories, query, args...); err != nil {
 		return nil, 0, err
 	}
 
+	
 	var pairs []ChatPair
 	for i := 0; i < len(histories); i += 2 {
 		if i+1 >= len(histories) {
 			break
 		}
 
-		userRole := getMessageRole(histories[i].Message)
-		assistantRole := getMessageRole(histories[i+1].Message)
+		userRole := getMessageRole(histories[i].ChatHistory.Message)
+		assistantRole := getMessageRole(histories[i+1].ChatHistory.Message)
 
+		
 		if userRole == "user" && assistantRole == "assistant" && histories[i].SessionID == histories[i+1].SessionID {
-			questionContent := extractContent(histories[i].Message)
-			answerContent := extractContent(histories[i+1].Message)
+			questionContent := extractContent(histories[i].ChatHistory.Message)
+			answerContent := extractContent(histories[i+1].ChatHistory.Message)
 
 			pair := ChatPair{
 				QuestionID:       histories[i].ID,
@@ -460,8 +486,11 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 				IsValidated:      histories[i+1].IsValidated,
 				IsAnswered:       histories[i+1].IsAnswered,
 				CreatedAt:        histories[i].CreatedAt,
+				
+				PlatformUniqueID: histories[i].PlatformUniqueID,
 			}
 
+			
 			if filter.IsValidated != nil {
 				reqVal := *filter.IsValidated
 				isValidated := pair.IsValidated
@@ -495,22 +524,23 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 
 			pairs = append(pairs, pair)
 		} else {
+			
 			i--
 		}
 	}
 
+	
 	if strings.ToUpper(filter.SortDirection) == "DESC" || filter.SortDirection == "" {
-
 		sort.SliceStable(pairs, func(i, j int) bool {
 			return pairs[i].CreatedAt.After(pairs[j].CreatedAt)
 		})
 	} else {
-
 		sort.SliceStable(pairs, func(i, j int) bool {
 			return pairs[i].CreatedAt.Before(pairs[j].CreatedAt)
 		})
 	}
 
+	
 	total := len(pairs)
 
 	if filter.Limit <= 0 {
