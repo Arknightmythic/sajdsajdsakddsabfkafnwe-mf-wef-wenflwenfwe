@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -47,16 +48,76 @@ type ChatRequest struct {
 	StartTimestamp   string `json:"start_timestamp"`
 }
 
+type Citation struct {
+	ID       string
+	Filename string
+}
+
+type CitationArray [2]string
+
+type FlexibleCitationArray []CitationArray
+
+func (f *FlexibleCitationArray) UnmarshalJSON(data []byte) error {
+	// Handle null case
+	if string(data) == "null" {
+		*f = []CitationArray{}
+		return nil
+	}
+
+	// Handle empty string case
+	if string(data) == `""` || string(data) == `''` {
+		*f = []CitationArray{}
+		return nil
+	}
+
+	// Try to unmarshal as string (and ignore it if it's empty)
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*f = []CitationArray{}
+		return nil
+	}
+
+	// Try array of arrays - the main case
+	var arr [][]interface{}
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*f = make([]CitationArray, 0, len(arr))
+		for _, item := range arr {
+			if len(item) >= 2 {
+				citation := CitationArray{
+					fmt.Sprintf("%v", item[0]), // ID
+					fmt.Sprintf("%v", item[1]), // Filename
+				}
+				*f = append(*f, citation)
+			}
+		}
+		return nil
+	}
+
+	// Try empty array case
+	var emptyArr []interface{}
+	if err := json.Unmarshal(data, &emptyArr); err == nil {
+		*f = []CitationArray{}
+		return nil
+	}
+
+	return fmt.Errorf("unable to unmarshal citations: unexpected format")
+}
+
 type FlexibleStringArray []string
 
 func (f *FlexibleStringArray) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*f = []string{}
+		return nil
+	}
 
+	// Try array of arrays (your current case)
 	var arr [][]interface{}
 	if err := json.Unmarshal(data, &arr); err == nil {
 		*f = make([]string, 0, len(arr))
 		for _, item := range arr {
 			if len(item) >= 2 {
-
+				// Extract the filename (second element)
 				filename := fmt.Sprintf("%v", item[1])
 				*f = append(*f, filename)
 			}
@@ -64,12 +125,14 @@ func (f *FlexibleStringArray) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
+	// Try regular string array
 	var strArr []string
 	if err := json.Unmarshal(data, &strArr); err == nil {
 		*f = strArr
 		return nil
 	}
 
+	// Try single string
 	var str string
 	if err := json.Unmarshal(data, &str); err != nil {
 		return err
@@ -84,18 +147,18 @@ func (f *FlexibleStringArray) UnmarshalJSON(data []byte) error {
 }
 
 type ChatResponse struct {
-	User             string              `json:"user"`
-	ConversationID   string              `json:"conversation_id"`
-	Query            string              `json:"query"`
-	RewrittenQuery   string              `json:"rewritten_query"`
-	Category         string              `json:"category"`
-	QuestionCategory []string            `json:"question_category"`
-	Answer           string              `json:"answer"`
-	Citations        FlexibleStringArray `json:"citations"`
-	IsHelpdesk       bool                `json:"is_helpdesk"`
-	IsAnswered       *bool               `json:"is_answered"`
-	QuestionID       int                 `json:"question_id"`
-	AnswerID         int                 `json:"answer_id"`
+	User             string                `json:"user"`
+	ConversationID   string                `json:"conversation_id"`
+	Query            string                `json:"query"`
+	RewrittenQuery   string                `json:"rewritten_query"`
+	Category         string                `json:"category"`
+	QuestionCategory []string              `json:"question_category"`
+	Answer           string                `json:"answer"`
+	Citations        FlexibleCitationArray `json:"citations"`
+	IsHelpdesk       bool                  `json:"is_helpdesk"`
+	IsAnswered       *bool                 `json:"is_answered"`
+	QuestionID       int                   `json:"question_id"`
+	AnswerID         int                   `json:"answer_id"`
 }
 
 func (c *Client) ExtractDocument(req ExtractRequest) error {
@@ -229,6 +292,8 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	log.Println(chatResp)
 
 	return &chatResp, nil
 }

@@ -525,12 +525,12 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 	channelName := conversationID.String()
 
 	var responseAnswer string
-	var responseCitations []string
+	var responseCitations external.FlexibleCitationArray
 	var responseQuestionCategory []string
 
 	if resp.IsHelpdesk {
 		responseAnswer = "Pesan Anda telah dikirim ke agen. Mohon tunggu balasan."
-		responseCitations = []string{}
+		responseCitations = external.FlexibleCitationArray{}
 		responseQuestionCategory = []string{}
 
 		existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)

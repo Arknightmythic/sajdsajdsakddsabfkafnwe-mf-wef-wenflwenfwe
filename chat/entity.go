@@ -2,6 +2,7 @@ package chat
 
 import (
 	"database/sql/driver"
+	"dokuprime-be/external"
 	"encoding/json"
 	"time"
 
@@ -47,20 +48,20 @@ type Metadata struct {
 }
 
 type ResponseAsk struct {
-	User             string   `json:"user"`
-	ConversationID   string   `json:"conversation_id"`
-	Query            string   `json:"query"`
-	RewrittenQuery   string   `json:"rewritten_query"`
-	Category         string   `json:"category"`
-	QuestionCategory []string `json:"question_category"`
-	Answer           string   `json:"answer"`
-	Citations        []string `json:"citations"`
-	IsHelpdesk       bool     `json:"is_helpdesk"`
-	IsAnswered       *bool    `json:"is_answered"`
-	Platform         string   `json:"platform"`
-	PlatformUniqueID string   `json:"platform_unique_id"`
-	QuestionID       int      `json:"question_id"`
-	AnswerID         int      `json:"answer_id"`
+	User             string                         `json:"user"`
+	ConversationID   string                         `json:"conversation_id"`
+	Query            string                         `json:"query"`
+	RewrittenQuery   string                         `json:"rewritten_query"`
+	Category         string                         `json:"category"`
+	QuestionCategory []string                       `json:"question_category"`
+	Answer           string                         `json:"answer"`
+	Citations        external.FlexibleCitationArray `json:"citations"`
+	IsHelpdesk       bool                           `json:"is_helpdesk"`
+	IsAnswered       *bool                          `json:"is_answered"`
+	Platform         string                         `json:"platform"`
+	PlatformUniqueID string                         `json:"platform_unique_id"`
+	QuestionID       int                            `json:"question_id"`
+	AnswerID         int                            `json:"answer_id"`
 }
 
 type ChatPair struct {
