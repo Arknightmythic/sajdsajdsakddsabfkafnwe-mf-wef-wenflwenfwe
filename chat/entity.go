@@ -59,6 +59,8 @@ type ResponseAsk struct {
 	IsAnswered       *bool    `json:"is_answered"`
 	Platform         string   `json:"platform"`
 	PlatformUniqueID string   `json:"platform_unique_id"`
+	QuestionID       int      `json:"question_id"`
+	AnswerID         int      `json:"answer_id"`
 }
 
 type ChatPair struct {

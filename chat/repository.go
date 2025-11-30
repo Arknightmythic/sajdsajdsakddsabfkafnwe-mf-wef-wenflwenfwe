@@ -651,3 +651,28 @@ func (r *ChatRepository) GetHelpdeskMessages(sessionID uuid.UUID, limit, offset 
 
 	return histories, total, nil
 }
+
+func (r *ChatRepository) UpdateFeedback(answerID int, feedback bool) error {
+	_, err := r.db.Exec(`UPDATE chat_history SET feedback = $1 WHERE id = $2`, feedback, answerID)
+	return err
+}
+
+func (r *ChatRepository) UpdateChatFeedback(sessionID uuid.UUID, feedback bool) error {
+	query := `
+		WITH random_unfeedback_ai AS (
+			SELECT id
+			FROM chat_history
+			WHERE session_id = $1
+				AND feedback IS NULL
+				AND message->>'type' = 'ai'
+			ORDER BY RANDOM()
+			LIMIT 1
+		)
+		UPDATE chat_history
+		SET feedback = $2
+		WHERE id IN (SELECT id FROM random_unfeedback_ai)
+	`
+
+	_, err := r.db.Exec(query, sessionID, feedback)
+	return err
+}
