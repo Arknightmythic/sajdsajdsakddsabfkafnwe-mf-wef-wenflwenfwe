@@ -185,6 +185,10 @@ func (s *DocumentService) RejectDocument(detailID int) error {
 		return fmt.Errorf("failed to set status to Rejected: %w", err)
 	}
 
+	if err := s.repo.UpdateDocumentDetailIngestStatus(detailID, "unprocessed"); err != nil {
+		return fmt.Errorf("failed to set ingest_status to unprocessed: %w", err)
+	}
+
 	return nil
 }
 

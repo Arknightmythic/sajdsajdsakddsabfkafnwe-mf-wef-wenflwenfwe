@@ -74,6 +74,7 @@ type ChatPair struct {
 	IsCannotAnswer   *bool     `json:"is_cannot_answer,omitempty"`
 	Revision         *string   `json:"revision,omitempty"`
 	SessionID        uuid.UUID `json:"session_id"`
+	PlatformUniqueID string    `json:"platform_unique_id"`
 	IsValidated      *bool     `json:"is_validated"`
 	IsAnswered       *bool     `json:"is_answered"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -123,6 +124,7 @@ type ChatHistoryFilter struct {
 	Offset        int
 	IsValidated   *string
 	IsAnswered    *bool
+	Search        string
 }
 
 type ConversationFilter struct {

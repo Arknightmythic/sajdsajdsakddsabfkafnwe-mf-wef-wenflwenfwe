@@ -55,7 +55,8 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 			dd.status AS status,
 			dd.is_latest AS is_latest,
 			dd.is_approve AS is_approve,
-			dd.created_at AS created_at
+			dd.created_at AS created_at,
+			dd.ingest_status AS ingest_status
 		FROM documents d
 		INNER JOIN document_details dd ON d.id = dd.document_id
 		WHERE dd.is_latest = true
@@ -87,6 +88,19 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
 		args = append(args, filter.Status)
 		argIndex++
+	}
+
+	if filter.IngestStatus != "" {
+		if filter.IngestStatus == "null" {
+			// Jika filter = "null", cari yang databasenya NULL (Belum tersentuh sama sekali)
+			conditions = append(conditions, "dd.ingest_status IS NULL")
+		} else {
+			// Untuk status: "unprocessed", "processing", "failed", "finished"
+			// Pencarian string exact match (case-sensitive biasanya ok untuk status sistem)
+			conditions = append(conditions, fmt.Sprintf("dd.ingest_status = $%d", argIndex))
+			args = append(args, filter.IngestStatus)
+			argIndex++
+		}
 	}
 
 	if filter.StartDate != nil {
@@ -175,6 +189,16 @@ func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, erro
 		argIndex++
 	}
 
+	if filter.IngestStatus != "" {
+		if filter.IngestStatus == "null" {
+			conditions = append(conditions, "dd.ingest_status IS NULL")
+		} else {
+			conditions = append(conditions, fmt.Sprintf("dd.ingest_status = $%d", argIndex))
+			args = append(args, filter.IngestStatus)
+			argIndex++
+		}
+	}
+
 	if filter.StartDate != nil {
 		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
 		args = append(args, *filter.StartDate)
@@ -210,7 +234,7 @@ func (r *DocumentRepository) GetDocumentDetailsByDocumentID(documentID int) ([]D
 	query := `
 		SELECT 
 			id, document_id, document_name, filename, data_type, staff, team, 
-			status, is_latest, is_approve, created_at
+			status, is_latest, is_approve, created_at, ingest_status
 		FROM document_details
 		WHERE document_id = $1
 		ORDER BY created_at DESC
@@ -239,7 +263,7 @@ func (r *DocumentRepository) GetDocumentDetailByID(id int) (*DocumentDetail, err
 	query := `
 		SELECT 
 			id, document_id, document_name, filename, data_type, staff, team, 
-			status, is_latest, is_approve, created_at
+			status, is_latest, is_approve, created_at, ingest_status
 		FROM document_details
 		WHERE id = $1
 	`
@@ -274,7 +298,8 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 		SELECT 
 			dd.id, dd.document_id, dd.document_name, dd.filename, dd.data_type, 
 			dd.staff, dd.team, dd.status, dd.is_latest, dd.is_approve, dd.created_at,
-			d.category
+			d.category,
+			dd.ingest_status
 		FROM document_details dd
 		INNER JOIN documents d ON dd.document_id = d.id
 		WHERE 1=1
@@ -452,4 +477,10 @@ func (r *DocumentRepository) GetTeamNameByUserID(userID int64) (string, error) {
 		return "", err
 	}
 	return teamName, nil
+}
+
+func (r *DocumentRepository) UpdateDocumentDetailIngestStatus(id int, status string) error {
+	query := `UPDATE document_details SET ingest_status = $1 WHERE id = $2`
+	_, err := r.db.Exec(query, status, id)
+	return err
 }

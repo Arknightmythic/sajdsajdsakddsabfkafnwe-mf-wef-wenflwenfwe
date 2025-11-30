@@ -651,6 +651,7 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 		Offset:        (page - 1) * pageSize,
 		IsValidated:   isValidatedFilter,
 		IsAnswered:    isAnsweredFilter,
+		Search:        ctx.Query("search"),
 	}
 
 	result, err := h.service.GetChatPairsBySessionID(sessionID, filter)
@@ -786,7 +787,7 @@ func parseDateRange(startDateStr, endDateStr string) (*time.Time, *time.Time, er
 		if err != nil {
 			return nil, nil, err
 		}
-		t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
+		// t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 		endDatePtr = &t
 	}
 
