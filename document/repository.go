@@ -92,11 +92,8 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 
 	if filter.IngestStatus != "" {
 		if filter.IngestStatus == "null" {
-			// Jika filter = "null", cari yang databasenya NULL (Belum tersentuh sama sekali)
 			conditions = append(conditions, "dd.ingest_status IS NULL")
 		} else {
-			// Untuk status: "unprocessed", "processing", "failed", "finished"
-			// Pencarian string exact match (case-sensitive biasanya ok untuk status sistem)
 			conditions = append(conditions, fmt.Sprintf("dd.ingest_status = $%d", argIndex))
 			args = append(args, filter.IngestStatus)
 			argIndex++

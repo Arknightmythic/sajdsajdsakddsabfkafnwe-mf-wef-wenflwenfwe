@@ -5,6 +5,7 @@ import (
 	"dokuprime-be/azure"
 	"dokuprime-be/chat"
 	"dokuprime-be/config"
+	"dokuprime-be/cron"
 	"dokuprime-be/document"
 	"dokuprime-be/grafana"
 	"dokuprime-be/guide"
@@ -70,6 +71,14 @@ func main() {
 	asyncProcessor := document.RegisterRoutesWithProcessor(r, db, redisClient)
 	azure.RegisterRoutes(r, db, redisClient)
 
+	scheduler := cron.NewScheduler()
+	helpdeskScheduler := cron.NewHelpdeskScheduler(db)
+	if err := helpdeskScheduler.RegisterJobs(scheduler); err != nil {
+		log.Fatalf("Failed to register helpdesk scheduler jobs: %v", err)
+	}
+	scheduler.Start()
+	defer scheduler.Stop()
+
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "8000"
@@ -92,6 +101,9 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+
+	// Stop scheduler first
+	scheduler.Stop()
 
 	if asyncProcessor != nil {
 		asyncProcessor.Shutdown()

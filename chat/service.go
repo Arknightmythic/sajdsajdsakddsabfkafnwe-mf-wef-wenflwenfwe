@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"log"
 	"math"
 
 	"github.com/google/uuid"
@@ -28,8 +27,6 @@ func (s *ChatService) GetAllChatHistory(filter ChatHistoryFilter) (*ChatHistoryW
 	if err != nil {
 		return nil, err
 	}
-
-	log.Println(histories[0].IsValidated)
 
 	totalPages := int(math.Ceil(float64(total) / float64(filter.Limit)))
 
