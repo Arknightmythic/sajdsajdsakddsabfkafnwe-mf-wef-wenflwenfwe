@@ -332,10 +332,6 @@ func (h *DocumentHandler) GetDocuments(ctx *gin.Context) {
 	}
 	if ed := ctx.Query("end_date"); ed != "" {
 		if t, err := parseDate(ed); err == nil {
-			// [HAPUS/KOMENTARI BARIS INI]
-			// t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
-			
-			// Gunakan nilai t apa adanya (16:59:59 dari frontend)
 			endDatePtr = &t
 		}
 	}
@@ -574,10 +570,6 @@ func (h *DocumentHandler) GetAllDocumentDetails(ctx *gin.Context) {
 	}
 	if ed := ctx.Query("end_date"); ed != "" {
 		if t, err := parseDate(ed); err == nil {
-			// [HAPUS/KOMENTARI BARIS INI]
-			// t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
-			
-			// Gunakan nilai t apa adanya (16:59:59 dari frontend)
 			endDatePtr = &t
 		}
 	}

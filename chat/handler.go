@@ -384,7 +384,6 @@ func (h *ChatHandler) DeleteConversation(ctx *gin.Context) {
 	util.SuccessResponse(ctx, "Conversation deleted successfully", nil)
 }
 
-// chat/handler.go - Enhanced Ask handler
 func (h *ChatHandler) Ask(ctx *gin.Context) {
 	var req struct {
 		PlatformUniqueID string `json:"platform_unique_id" binding:"required"`
@@ -404,6 +403,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		log.Println("WebSocket not connected, attempting to reconnect...")
 		if err := h.wsClient.Connect(); err != nil {
 			log.Printf("Failed to connect to WebSocket: %v", err)
+
 		}
 	}
 
@@ -424,9 +424,8 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		}
 	}
 
-	// ===== ENHANCED: Handle helpdesk mode immediately =====
 	if conversation != nil && conversation.IsHelpdesk {
-		// Save user message to database
+
 		err := h.messageService.HandleHelpdeskMessage(
 			conversation.ID,
 			req.Query,
@@ -442,7 +441,6 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			return
 		}
 
-		// Check if helpdesk record exists
 		existingHelpdesk, err := h.helpdeskService.GetBySessionID(conversation.ID.String())
 		if err != nil && err != sql.ErrNoRows {
 			log.Println("Error checking helpdesk:", err)
@@ -450,7 +448,6 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			return
 		}
 
-		// Create helpdesk record if doesn't exist
 		if existingHelpdesk == nil {
 			err = h.helpdeskService.Create(&helpdesk.Helpdesk{
 				SessionID:        conversation.ID.String(),
@@ -466,12 +463,11 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 			}
 		}
 
-		// Return immediately - frontend will wait for WebSocket messages
 		responseAsk := ResponseAsk{
 			User:             req.PlatformUniqueID,
 			ConversationID:   conversation.ID.String(),
 			Query:            req.Query,
-			Answer:           "", // Empty answer - agent will respond via WebSocket
+			Answer:           "",
 			IsHelpdesk:       true,
 			Platform:         conversation.Platform,
 			PlatformUniqueID: conversation.PlatformUniqueID,
@@ -480,9 +476,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		util.SuccessResponse(ctx, "Message sent to agent queue", responseAsk)
 		return
 	}
-	// ===== END ENHANCEMENT =====
 
-	// Regular bot flow continues here...
 	chatReq := external.ChatRequest{
 		PlatformUniqueID: req.PlatformUniqueID,
 		Query:            req.Query,
@@ -544,6 +538,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 			if err != nil {
 				log.Printf("Error creating helpdesk: %v", err)
+
 			}
 		}
 	} else {
@@ -591,16 +586,21 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 			if err := h.wsClient.Publish(channelName, publishData); err != nil {
 				log.Printf("Failed to publish to channel %s: %v", channelName, err)
+
 			} else {
 				log.Printf("✅ Published message to channel: %s", channelName)
 			}
 		}
 	} else {
+
 		err := h.externalClient.SendMessageToAPI(responseAsk)
 		if err != nil {
+			log.Printf("Error sending to Multi Channel API: %v", err)
 			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error send to Multi Channel API")
+			return
 		}
 	}
+
 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 }
 
@@ -789,7 +789,7 @@ func parseDateRange(startDateStr, endDateStr string) (*time.Time, *time.Time, er
 		if err != nil {
 			return nil, nil, err
 		}
-		// t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
+
 		endDatePtr = &t
 	}
 
