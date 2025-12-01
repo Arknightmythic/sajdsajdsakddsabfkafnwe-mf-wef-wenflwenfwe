@@ -3,6 +3,8 @@ package helpdesk
 import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"fmt"
+	"strings"
 )
 
 type HelpdeskRepository struct {
@@ -20,25 +22,56 @@ func (r *HelpdeskRepository) Create(helpdesk *Helpdesk) error {
 		Scan(&helpdesk.ID, &helpdesk.CreatedAt)
 }
 
-func (r *HelpdeskRepository) GetAll(limit, offset int, search string) ([]Helpdesk, error) {
-	var helpdesks []Helpdesk
+func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status string) ([]Helpdesk, int, error) {
+	helpdesks := []Helpdesk{} // Inisialisasi slice kosong
+	var conditions []string
+	var args []interface{}
+	argIdx := 1
+
 	query := `SELECT id, session_id, platform, platform_unique_id, status, user_id, created_at 
 			  FROM helpdesk`
 
+	// Filter Search (General)
 	if search != "" {
-		query += ` WHERE platform ILIKE $3 OR status ILIKE $3`
-		err := r.db.Select(&helpdesks, query+` ORDER BY id DESC LIMIT $1 OFFSET $2`, limit, offset, "%"+search+"%")
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		err := r.db.Select(&helpdesks, query+` ORDER BY id DESC LIMIT $1 OFFSET $2`, limit, offset)
-		if err != nil {
-			return nil, err
-		}
+		// PERBAIKAN DI SINI: Tambahkan "OR session_id::text ILIKE ..."
+		// Kita perlu cast UUID ke text agar bisa di-ILIKE
+		conditions = append(conditions, fmt.Sprintf("(platform ILIKE $%d OR platform_unique_id ILIKE $%d OR session_id::text ILIKE $%d)", argIdx, argIdx, argIdx))
+		args = append(args, "%"+search+"%")
+		argIdx++
 	}
 
-	return helpdesks, nil
+	// Filter Status (Specific)
+	if status != "" {
+		conditions = append(conditions, fmt.Sprintf("status ILIKE $%d", argIdx))
+		args = append(args, status)
+		argIdx++
+	}
+
+	where := ""
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// Count query
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM helpdesk %s", where)
+	var total int
+	if err := r.db.Get(&total, countQuery, args...); err != nil {
+		return []Helpdesk{}, 0, err
+	}
+
+	if total == 0 {
+		return []Helpdesk{}, 0, nil
+	}
+
+	// Main query
+	fullQuery := fmt.Sprintf("%s %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", query, where, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	if err := r.db.Select(&helpdesks, fullQuery, args...); err != nil {
+		return []Helpdesk{}, 0, err
+	}
+
+	return helpdesks, total, nil
 }
 
 func (r *HelpdeskRepository) GetTotal(search string) (int, error) {
