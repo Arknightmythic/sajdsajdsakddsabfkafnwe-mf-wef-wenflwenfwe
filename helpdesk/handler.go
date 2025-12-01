@@ -55,18 +55,14 @@ func (h *HelpdeskHandler) GetAll(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
 	search := ctx.DefaultQuery("search", "")
+	status := ctx.DefaultQuery("status", "") // Baca parameter status
 
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
-	}
+	if limit <= 0 { limit = 10 }
+	if limit > 100 { limit = 100 }
+	if offset < 0 { offset = 0 }
 
-	helpdesks, total, err := h.service.GetAll(limit, offset, search)
+	// Panggil service dengan status
+	helpdesks, total, err := h.service.GetAll(limit, offset, search, status)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
@@ -78,6 +74,7 @@ func (h *HelpdeskHandler) GetAll(ctx *gin.Context) {
 		"limit":     limit,
 		"offset":    offset,
 		"search":    search,
+		"status":    status,
 	}
 
 	util.SuccessResponse(ctx, "Helpdesks retrieved successfully", response)

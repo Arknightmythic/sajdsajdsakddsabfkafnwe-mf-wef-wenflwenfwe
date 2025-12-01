@@ -18,17 +18,13 @@ func (s *HelpdeskService) Create(helpdesk *Helpdesk) error {
 	return s.repo.Create(helpdesk)
 }
 
-func (s *HelpdeskService) GetAll(limit, offset int, search string) ([]Helpdesk, int, error) {
-	helpdesks, err := s.repo.GetAll(limit, offset, search)
+
+func (s *HelpdeskService) GetAll(limit, offset int, search string, status string) ([]Helpdesk, int, error) {
+
+	helpdesks, total, err := s.repo.GetAll(limit, offset, search, status)
 	if err != nil {
 		return nil, 0, err
 	}
-
-	total, err := s.repo.GetTotal(search)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	return helpdesks, total, nil
 }
 
