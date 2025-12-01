@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -314,6 +315,8 @@ func (c *Client) SendMessageToAPI(data interface{}) error {
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-API-Key", os.Getenv("MESSAGES_API_KEY"))
+
+	log.Println("MESSAGE API KEY -> ", c.messagesURL+"/api/send/reply")
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
