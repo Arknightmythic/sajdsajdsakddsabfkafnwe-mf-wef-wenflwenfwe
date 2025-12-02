@@ -731,3 +731,32 @@ func (h *DocumentHandler) BatchDeleteDocument(c *gin.Context) {
 		"errors":        errors, // Opsional: kirim detail error jika perlu
 	})
 }
+
+func (h *DocumentHandler) GenerateViewURLByDocumentID(ctx *gin.Context) {
+	var req struct {
+		DocumentID int `json:"document_id" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "document_id is required")
+		return
+	}
+
+	token, err := h.service.GenerateViewTokenByDocumentID(req.DocumentID)
+	if err != nil {
+		// Bisa handle error spesifik jika dokumen tidak ditemukan (404) vs error server (500)
+		util.ErrorResponse(ctx, http.StatusNotFound, err.Error())
+		return
+	}
+
+	scheme := "https"
+	if ctx.Request.TLS != nil {
+		scheme = "https"
+	}
+
+	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+	viewURL := fmt.Sprintf("%s/api/documents/view-file?token=%s", baseURL, token)
+
+	util.SuccessResponse(ctx, "View URL generated successfully", gin.H{
+		"url": viewURL,
+	})
+}

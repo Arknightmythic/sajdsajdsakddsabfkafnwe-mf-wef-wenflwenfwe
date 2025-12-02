@@ -552,3 +552,15 @@ func (s *DocumentService) BatchDeleteDocuments(ids []int) (int, []string) {
 
 	return successCount, errorMessages
 }
+
+
+func (s *DocumentService) GenerateViewTokenByDocumentID(documentID int) (string, error) {
+	// Cari detail dokumen yang latest & approved berdasarkan document_id
+	detail, err := s.repo.GetApprovedLatestDocumentDetailByDocumentID(documentID)
+	if err != nil {
+		return "", fmt.Errorf("approved and latest document detail not found for document_id %d: %w", documentID, err)
+	}
+
+	// Generate token menggunakan filename yang ditemukan (reuse fungsi yang ada)
+	return s.GenerateViewToken(detail.Filename)
+}

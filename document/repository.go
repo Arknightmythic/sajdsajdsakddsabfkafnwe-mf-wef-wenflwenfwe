@@ -481,3 +481,20 @@ func (r *DocumentRepository) UpdateDocumentDetailIngestStatus(id int, status str
 	_, err := r.db.Exec(query, status, id)
 	return err
 }
+
+func (r *DocumentRepository) GetApprovedLatestDocumentDetailByDocumentID(documentID int) (*DocumentDetail, error) {
+	var detail DocumentDetail
+	query := `
+		SELECT 
+			id, document_id, document_name, filename, data_type, staff, team, 
+			status, is_latest, is_approve, created_at, ingest_status
+		FROM document_details
+		WHERE document_id = $1 AND is_latest = true AND is_approve = true
+		LIMIT 1
+	`
+	err := r.db.Get(&detail, query, documentID)
+	if err != nil {
+		return nil, err
+	}
+	return &detail, nil
+}
