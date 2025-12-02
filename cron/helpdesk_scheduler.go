@@ -27,13 +27,12 @@ func (h *HelpdeskScheduler) UpdateQueuedToPending() {
 		log.Printf("Using default period: %d minutes", period)
 	}
 
-	threshold := time.Now().Add(-time.Duration(period) * time.Minute)
-
+	// threshold := time.Now().Add(-time.Duration(period) * time.Minute)
+	threshold := time.Now().UTC().Add(-time.Duration(period) * time.Minute)
 	query := `
 		UPDATE bkpm.helpdesk
 		SET status = 'pending'
-		WHERE status = 'Queue'
-		or status = 'queue'
+		WHERE (status = 'Queue' OR status = 'queue') -- Tambahkan kurung di sini
 		AND created_at <= $1
 	`
 
