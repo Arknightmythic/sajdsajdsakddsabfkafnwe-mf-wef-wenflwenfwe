@@ -707,8 +707,8 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		Question   string `json:"question" binding:"required"`
 		AnswerID   int    `json:"answer_id" binding:"required"`
 		Answer     string `json:"answer" binding:"required"`
-		Revision   string `json:"revision" `
-		Validate   bool   `json:"validate" binding:"required"`
+		Revision   string `json:"revision"`
+		Validate   bool   `json:"validate"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
