@@ -739,7 +739,7 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 
 		extractReq := external.ExtractRequest{
 			ID:       "faq-" + strconv.Itoa(req.AnswerID),
-			Category: "faq",
+			Category: "qna",
 			Filename: tempFileName,
 			FilePath: tempFilePath,
 		}
