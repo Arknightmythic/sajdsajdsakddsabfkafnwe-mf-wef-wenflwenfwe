@@ -419,13 +419,20 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 	}
 
 	
-	if filter.Search != "" {
-		searchPattern := "%" + filter.Search + "%"
-		
-		conditions = append(conditions, fmt.Sprintf("(c.platform_unique_id ILIKE $%d OR ch.message::text ILIKE $%d)", argIdx, argIdx))
-		args = append(args, searchPattern)
-		argIdx++
-	}
+	// Filter Search
+    if filter.Search != "" {
+        searchPattern := "%" + filter.Search + "%"
+
+        conditions = append(conditions, fmt.Sprintf(`(
+            c.platform_unique_id ILIKE $%d OR 
+            ch.session_id::text ILIKE $%d OR 
+            ch.message ->> 'content' ILIKE $%d OR 
+            ch.message -> 'data' ->> 'content' ILIKE $%d
+        )`, argIdx, argIdx, argIdx, argIdx))
+        
+        args = append(args, searchPattern)
+        argIdx++
+    }
 
 	
 	conditions = append(conditions, "c.is_helpdesk = false")
