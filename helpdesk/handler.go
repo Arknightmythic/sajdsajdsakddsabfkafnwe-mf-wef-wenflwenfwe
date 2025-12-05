@@ -22,6 +22,36 @@ func NewHelpdeskHandler(service *HelpdeskService, messageService *messaging.Mess
 	}
 }
 
+func (h *HelpdeskHandler) GetSwitchStatus(ctx *gin.Context) {
+	status, err := h.service.GetSwitchStatus()
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Switch status retrieved successfully", status)
+}
+
+func (h *HelpdeskHandler) UpdateSwitchStatus(ctx *gin.Context) {
+	var req struct {
+		Status bool `json:"status"`
+	}
+	
+	// Gunakan ShouldBindJSON untuk mapping true/false dari JSON body
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	updatedStatus, err := h.service.UpdateSwitchStatus(req.Status)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Switch status updated successfully", updatedStatus)
+}
+
 func (h *HelpdeskHandler) CreateHelpdesk(ctx *gin.Context) {
 	var req struct {
 		SessionID        string  `json:"session_id"`

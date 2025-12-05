@@ -1,6 +1,7 @@
 package helpdesk
 
 import (
+	"database/sql"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"fmt"
@@ -13,6 +14,54 @@ type HelpdeskRepository struct {
 
 func NewHelpdeskRepository(db *sqlx.DB) *HelpdeskRepository {
 	return &HelpdeskRepository{db: db}
+}
+
+func (r *HelpdeskRepository) GetSwitchStatus() (*SwitchHelpdesk, error) {
+	var sh SwitchHelpdesk
+	// Ambil 1 baris data. LIMIT 1 memastikan kita hanya mengambil satu.
+	query := `SELECT id, status FROM switch_helpdesk LIMIT 1`
+	err := r.db.Get(&sh, query)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Jika tabel kosong, INSERT default value (false/off)
+			// Kita return data yang baru di-insert
+			insertQuery := `INSERT INTO switch_helpdesk (status) VALUES (false) RETURNING id, status`
+			err = r.db.QueryRowx(insertQuery).StructScan(&sh)
+			if err != nil {
+				return nil, fmt.Errorf("failed to insert default switch status: %w", err)
+			}
+			return &sh, nil
+		}
+		return nil, err
+	}
+
+	return &sh, nil
+}
+
+func (r *HelpdeskRepository) UpdateSwitchStatus(status bool) (*SwitchHelpdesk, error) {
+	// Pastikan data ada dulu sebelum update (handle case extremely rare race condition atau tabel kosong saat update)
+	// Kita reuse logic GetSwitchStatus untuk memastikan row dibuat jika belum ada
+	_, err := r.GetSwitchStatus()
+	if err != nil {
+		return nil, err
+	}
+
+	// Update baris yang ada (menggunakan subquery ID dari limit 1 agar aman walau ID berapapun)
+	query := `
+		UPDATE switch_helpdesk 
+		SET status = $1 
+		WHERE id = (SELECT id FROM switch_helpdesk LIMIT 1)
+		RETURNING id, status
+	`
+	
+	var sh SwitchHelpdesk
+	err = r.db.QueryRowx(query, status).StructScan(&sh)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sh, nil
 }
 
 func (r *HelpdeskRepository) Create(helpdesk *Helpdesk) error {

@@ -14,6 +14,14 @@ func NewHelpdeskService(repo *HelpdeskRepository) *HelpdeskService {
 	return &HelpdeskService{repo: repo}
 }
 
+func (s *HelpdeskService) GetSwitchStatus() (*SwitchHelpdesk, error) {
+	return s.repo.GetSwitchStatus()
+}
+
+func (s *HelpdeskService) UpdateSwitchStatus(status bool) (*SwitchHelpdesk, error) {
+	return s.repo.UpdateSwitchStatus(status)
+}
+
 func (s *HelpdeskService) Create(helpdesk *Helpdesk) error {
 	return s.repo.Create(helpdesk)
 }

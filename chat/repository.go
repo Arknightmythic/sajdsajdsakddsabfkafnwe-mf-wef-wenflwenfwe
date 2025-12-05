@@ -660,7 +660,15 @@ func (r *ChatRepository) GetHelpdeskMessages(sessionID uuid.UUID, limit, offset 
 }
 
 func (r *ChatRepository) UpdateFeedback(answerID int, feedback bool) error {
-	_, err := r.db.Exec(`UPDATE chat_history SET feedback = $1 WHERE id = $2`, feedback, answerID)
+	query := `
+		UPDATE chat_history 
+		SET feedback = CASE 
+			WHEN feedback = $1 THEN NULL 
+			ELSE $1 
+		END 
+		WHERE id = $2
+	`
+	_, err := r.db.Exec(query, feedback, answerID)
 	return err
 }
 

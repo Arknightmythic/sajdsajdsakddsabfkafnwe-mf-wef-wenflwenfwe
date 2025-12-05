@@ -11,3 +11,9 @@ type Helpdesk struct {
 	UserID           int       `db:"user_id" json:"user_id"`
 	CreatedAt        time.Time `db:"created_at" json:"created_at"`
 }
+
+
+type SwitchHelpdesk struct {
+	ID     int  `db:"id" json:"id"`
+	Status bool `db:"status" json:"status"`
+}
