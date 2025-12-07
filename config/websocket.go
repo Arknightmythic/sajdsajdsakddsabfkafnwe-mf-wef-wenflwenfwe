@@ -74,13 +74,7 @@ func (wsc *WebSocketClient) Connect() error {
 }
 
 func (wsc *WebSocketClient) readMessages() {
-	defer func() {
-		wsc.mu.Lock()
-		wsc.connected = false
-		wsc.mu.Unlock()
-
-		go wsc.reconnect()
-	}()
+	defer wsc.handleDisconnect()
 
 	for {
 		var response WebSocketResponse
@@ -92,21 +86,37 @@ func (wsc *WebSocketClient) readMessages() {
 			break
 		}
 
-		switch response.Event {
-		case "message":
-			wsc.mu.Lock()
-			handlers, exists := wsc.messageHandlers[response.Channel]
-			wsc.mu.Unlock()
+		
+		wsc.processResponse(response)
+	}
+}
 
-			if exists {
-				for _, handler := range handlers {
-					go handler(response.Data)
-				}
-			}
-		default:
-			if response.Status != "" {
-				log.Printf("WebSocket status: %s - %s", response.Status, response.Message)
-			}
+func (wsc *WebSocketClient) handleDisconnect() {
+	wsc.mu.Lock()
+	wsc.connected = false
+	wsc.mu.Unlock()
+	go wsc.reconnect()
+}
+
+func (wsc *WebSocketClient) processResponse(response WebSocketResponse) {
+	switch response.Event {
+	case "message":
+		wsc.handleMessageEvent(response.Channel, response.Data)
+	default:
+		if response.Status != "" {
+			log.Printf("WebSocket status: %s - %s", response.Status, response.Message)
+		}
+	}
+}
+
+func (wsc *WebSocketClient) handleMessageEvent(channel string, data json.RawMessage) {
+	wsc.mu.Lock()
+	handlers, exists := wsc.messageHandlers[channel]
+	wsc.mu.Unlock()
+
+	if exists {
+		for _, handler := range handlers {
+			go handler(data)
 		}
 	}
 }

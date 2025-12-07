@@ -115,6 +115,26 @@ type HelpdeskMessageResponse struct {
 }
 
 func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message string, userType string, platform string, platformUniqueID *string, startTimestamp string) error {
+	
+	chatHistoryID, err := s.saveHelpdeskMessageToDB(sessionID, message, userType, startTimestamp)
+	if err != nil {
+		return err
+	}
+
+	
+	publishData := s.preparePublishData(sessionID, message, userType, platform, platformUniqueID, chatHistoryID)
+
+	
+	if platform == "web" {
+		s.handleWebHelpdesk(sessionID, publishData)
+	} else {
+		return s.handleExternalHelpdesk(sessionID, message, userType, platform, platformUniqueID, publishData)
+	}
+
+	return nil
+}
+
+func (s *MessageService) saveHelpdeskMessageToDB(sessionID uuid.UUID, message, userType, startTimestamp string) (int, error) {
 	var chatHistoryID int
 	var err error
 
@@ -124,18 +144,21 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 	case "agent":
 		_, chatHistoryID, err = s.CreateAgentMessage(sessionID, message, startTimestamp)
 	default:
-		return fmt.Errorf("invalid user_type: %s", userType)
+		return 0, fmt.Errorf("invalid user_type: %s", userType)
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to create chat history: %w", err)
+		return 0, fmt.Errorf("failed to create chat history: %w", err)
 	}
 
 	log.Printf("💾 Saved message to database with ID: %d", chatHistoryID)
+	return chatHistoryID, nil
+}
 
+func (s *MessageService) preparePublishData(sessionID uuid.UUID, message, userType, platform string, platformUniqueID *string, chatHistoryID int) map[string]interface{} {
 	messageUID := fmt.Sprintf("%s-%s-%d", sessionID.String(), userType, chatHistoryID)
 
-	publishData := map[string]interface{}{
+	return map[string]interface{}{
 		"message_uid":        messageUID,
 		"chat_history_id":    chatHistoryID,
 		"session_id":         sessionID.String(),
@@ -145,55 +168,53 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 		"platform":           platform,
 		"platform_unique_id": platformUniqueID,
 	}
+}
 
-	if platform == "web" {
-		mainChannel := sessionID.String()
-		agentChannel := sessionID.String() + Agent
+func (s *MessageService) handleWebHelpdesk(sessionID uuid.UUID, publishData map[string]interface{}) {
+	mainChannel := sessionID.String()
+	agentChannel := sessionID.String() + Agent
 
-		if err := s.PublishToChannel(mainChannel, publishData); err != nil {
-			log.Printf("Failed to publish to main channel: %v", err)
-		}
-
-		if err := s.PublishToChannel(agentChannel, publishData); err != nil {
-			log.Printf("Failed to publish to agent channel: %v", err)
-		}
-
-		log.Printf("✅ Published to both channels: %s and %s", mainChannel, agentChannel)
-	} else {
-
-		if userType == "agent" {
-
-			userID := sessionID.String()
-			if platformUniqueID != nil && *platformUniqueID != "" {
-				userID = *platformUniqueID
-			}
-
-			response := HelpdeskMessageResponse{
-				User:             userID,
-				ConversationID:   sessionID.String(),
-				Query:            "",
-				Answer:           message,
-				Platform:         platform,
-				PlatformUniqueID: platformUniqueID,
-				IsHelpdesk:       true,
-			}
-
-			if err := s.externalClient.SendMessageToAPI(response); err != nil {
-				log.Printf("❌ Failed to send message to external API: %v", err)
-				return fmt.Errorf("failed to send message to external API: %w", err)
-			}
-
-			log.Printf("✅ Sent agent message to external API for platform: %s", platform)
-		} else {
-
-			agentChannel := sessionID.String() + Agent
-			if err := s.PublishToChannel(agentChannel, publishData); err != nil {
-				log.Printf("Failed to publish user message to agent channel: %v", err)
-			}
-			log.Printf("✅ Published user message to agent channel: %s", agentChannel)
-		}
+	if err := s.PublishToChannel(mainChannel, publishData); err != nil {
+		log.Printf("Failed to publish to main channel: %v", err)
 	}
 
+	if err := s.PublishToChannel(agentChannel, publishData); err != nil {
+		log.Printf("Failed to publish to agent channel: %v", err)
+	}
+
+	log.Printf("✅ Published to both channels: %s and %s", mainChannel, agentChannel)
+}
+
+func (s *MessageService) handleExternalHelpdesk(sessionID uuid.UUID, message, userType, platform string, platformUniqueID *string, publishData map[string]interface{}) error {
+	if userType == "agent" {
+		userID := sessionID.String()
+		if platformUniqueID != nil && *platformUniqueID != "" {
+			userID = *platformUniqueID
+		}
+
+		response := HelpdeskMessageResponse{
+			User:             userID,
+			ConversationID:   sessionID.String(),
+			Query:            "",
+			Answer:           message,
+			Platform:         platform,
+			PlatformUniqueID: platformUniqueID,
+			IsHelpdesk:       true,
+		}
+
+		if err := s.externalClient.SendMessageToAPI(response); err != nil {
+			log.Printf("❌ Failed to send message to external API: %v", err)
+			return fmt.Errorf("failed to send message to external API: %w", err)
+		}
+
+		log.Printf("✅ Sent agent message to external API for platform: %s", platform)
+	} else {
+		agentChannel := sessionID.String() + Agent
+		if err := s.PublishToChannel(agentChannel, publishData); err != nil {
+			log.Printf("Failed to publish user message to agent channel: %v", err)
+		}
+		log.Printf("✅ Published user message to agent channel: %s", agentChannel)
+	}
 	return nil
 }
 

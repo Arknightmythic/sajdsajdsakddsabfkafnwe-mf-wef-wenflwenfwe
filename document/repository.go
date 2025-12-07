@@ -51,7 +51,9 @@ func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error 
 }
 
 func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentWithDetail, error) {
-	var documents []DocumentWithDetail
+	// 1. Build Filter Conditions
+	conditions, args, argIndex := r.buildDocumentFilters(filter)
+
 	base := `
 		SELECT 
 			d.id AS id,
@@ -71,6 +73,29 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 		WHERE dd.is_latest = true
 	`
 
+	query := base
+	if len(conditions) > 0 {
+		query += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	// 2. Add Sorting
+	query += r.buildSortClause(filter)
+
+	// 3. Add Pagination
+	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, limit, offset)
+
+	// 4. Execute Query
+	var documents []DocumentWithDetail
+	err := r.db.Select(&documents, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return documents, nil
+}
+
+func (r *DocumentRepository) buildDocumentFilters(filter DocumentFilter) ([]string, []interface{}, int) {
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
@@ -120,15 +145,14 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 		argIndex++
 	}
 
-	query := base
-	if len(conditions) > 0 {
-		query += " AND " + strings.Join(conditions, " AND ")
-	}
+	return conditions, args, argIndex
+}
 
+func (r *DocumentRepository) buildSortClause(filter DocumentFilter) string {
 	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true}
 	sortBy := isQueryCreatedAt
+
 	if filter.SortBy != "" {
-		
 		sb := filter.SortBy
 		if allowedSort[sb] {
 			sortBy = sb
@@ -136,27 +160,23 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 			sortBy = "dd." + sb
 		}
 	}
+
 	dir := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		dir = "ASC"
 	}
 
-	if filter.Limit <= 0 {
-		filter.Limit = 10
-	}
-	if filter.Offset < 0 {
-		filter.Offset = 0
-	}
+	return fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
+}
 
-	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
-	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
-	args = append(args, filter.Limit, filter.Offset)
-
-	err := r.db.Select(&documents, query, args...)
-	if err != nil {
-		return nil, err
+func (r *DocumentRepository) ensurePagination(limit, offset int) (int, int) {
+	if limit <= 0 {
+		limit = 10
 	}
-	return documents, nil
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }
 
 func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, error) {
@@ -299,7 +319,9 @@ func (r *DocumentRepository) UpdateDocumentDetailStatus(id int, status string) e
 }
 
 func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) ([]DocumentDetail, error) {
-	var details []DocumentDetail
+	// 1. Build Filter Conditions
+	conditions, args, argIndex := r.buildDocumentDetailFilters(filter)
+
 	base := `
 		SELECT 
 			dd.id, dd.document_id, dd.document_name, dd.filename, dd.data_type, 
@@ -311,6 +333,34 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 		WHERE 1=1
 	`
 
+	query := base
+	if len(conditions) > 0 {
+		query += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	// 2. Add Sorting
+	query += r.buildDetailSortClause(filter)
+
+	// 3. Add Pagination (Menggunakan helper ensurePagination yang sudah ada dari langkah sebelumnya)
+	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, limit, offset)
+
+	// 4. Execute Query
+	var details []DocumentDetail
+	err := r.db.Select(&details, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return details, nil
+}
+
+// ==================================================================================
+// TAMBAHAN HELPER FUNCTIONS KHUSUS DOCUMENT DETAILS
+// (Tambahkan di bawah, jangan hapus helper yang sudah ada sebelumnya)
+// ==================================================================================
+
+func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFilter) ([]string, []interface{}, int) {
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
@@ -356,13 +406,13 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 		argIndex++
 	}
 
-	query := base
-	if len(conditions) > 0 {
-		query += " AND " + strings.Join(conditions, " AND ")
-	}
+	return conditions, args, argIndex
+}
 
+func (r *DocumentRepository) buildDetailSortClause(filter DocumentDetailFilter) string {
 	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true}
 	sortBy := isQueryCreatedAt
+
 	if filter.SortBy != "" {
 		sb := filter.SortBy
 		if allowedSort[sb] {
@@ -371,27 +421,13 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 			sortBy = "dd." + sb
 		}
 	}
+
 	dir := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		dir = "ASC"
 	}
 
-	if filter.Limit <= 0 {
-		filter.Limit = 10
-	}
-	if filter.Offset < 0 {
-		filter.Offset = 0
-	}
-
-	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
-	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
-	args = append(args, filter.Limit, filter.Offset)
-
-	err := r.db.Select(&details, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return details, nil
+	return fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
 }
 
 func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter) (int, error) {

@@ -309,11 +309,61 @@ func (s *DocumentService) StartBatchUpload(files []*multipart.FileHeader, catego
 	return batchID, nil
 }
 
+type batchStats struct {
+	processed   int
+	successful  int
+	failed      int
+	extracted   int
+	total       int
+	batchID     string
+	autoApprove bool
+	mu          sync.Mutex
+}
+
 func (s *DocumentService) processBatchUpload(batchID string, files []FileData, category, email, accountType string, autoApprove bool) {
+	// 1. Prepare Environment
+	uploadDir, maxFileSize, validTypes, err := s.prepareBatchEnv(batchID)
+	if err != nil {
+		return
+	}
+
+	// 2. Initialize Stats
+	stats := &batchStats{
+		total:       len(files),
+		batchID:     batchID,
+		autoApprove: autoApprove,
+	}
+
+	workerCount := 10
+	jobs := make(chan FileData, len(files))
+	var wg sync.WaitGroup
+
+	// 3. Start Workers
+	for w := 0; w < workerCount; w++ {
+		wg.Add(1)
+		go s.runBatchWorker(w, jobs, &wg, stats, category, email, accountType, uploadDir, validTypes, maxFileSize)
+	}
+
+	// 4. Distribute Jobs
+	for _, file := range files {
+		jobs <- file
+	}
+	close(jobs)
+
+	// 5. Wait and Finalize
+	wg.Wait()
+	s.finalizeBatch(stats)
+}
+
+// ==================================================================================
+// HELPER FUNCTIONS (Tambahkan di bawah processBatchUpload)
+// ==================================================================================
+
+func (s *DocumentService) prepareBatchEnv(batchID string) (string, int, map[string]bool, error) {
 	uploadDir := config.GetUploadPath()
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		log.Printf("Batch %s: Failed to create upload directory: %v", batchID, err)
-		return
+		return "", 0, nil, err
 	}
 
 	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
@@ -324,80 +374,65 @@ func (s *DocumentService) processBatchUpload(batchID string, files []FileData, c
 	}
 	maxFileSize := maxFileSizeFromEnv * 1024 * 1024
 
-	var (
-		processed  int
-		successful int
-		failed     int
-		extracted  int
-		mu         sync.Mutex
-	)
+	return uploadDir, maxFileSize, validTypes, nil
+}
 
-	workerCount := 10
-	jobs := make(chan FileData, len(files))
+func (s *DocumentService) runBatchWorker(workerID int, jobs <-chan FileData, wg *sync.WaitGroup, stats *batchStats, category, email, accountType, uploadDir string, validTypes map[string]bool, maxFileSize int) {
+	defer wg.Done()
 
-	var wg sync.WaitGroup
+	for file := range jobs {
+		documentID, detailID, success := s.processFileDataWithExtraction(
+			file, category, email, accountType, uploadDir,
+			validTypes, maxFileSize, stats.batchID, workerID, stats.autoApprove,
+		)
 
-	for w := 0; w < workerCount; w++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
+		s.updateBatchStats(stats, success, documentID, detailID)
+	}
+}
 
-			for file := range jobs {
-				documentID, detailID, success := s.processFileDataWithExtraction(
-					file, category, email, accountType, uploadDir,
-					validTypes, maxFileSize, batchID, workerID, autoApprove,
-				)
+func (s *DocumentService) updateBatchStats(stats *batchStats, success bool, documentID, detailID int) {
+	stats.mu.Lock()
+	defer stats.mu.Unlock()
 
-				mu.Lock()
-				processed++
-				if success {
-					successful++
-
-					if autoApprove && documentID > 0 && detailID > 0 {
-						extracted++
-					}
-				} else {
-					failed++
-				}
-
-				if processed%10 == 0 || processed == len(files) {
-					s.setBatchStatus(batchID, map[string]interface{}{
-						"total":        len(files),
-						"processed":    processed,
-						"successful":   successful,
-						"failed":       failed,
-						"extracted":    extracted,
-						"status":       "processing",
-						"auto_approve": autoApprove,
-						"started_at":   s.getBatchStartTime(batchID),
-					})
-				}
-				mu.Unlock()
-			}
-		}(w)
+	stats.processed++
+	if success {
+		stats.successful++
+		if stats.autoApprove && documentID > 0 && detailID > 0 {
+			stats.extracted++
+		}
+	} else {
+		stats.failed++
 	}
 
-	for _, file := range files {
-		jobs <- file
+	if stats.processed%10 == 0 || stats.processed == stats.total {
+		s.setBatchStatus(stats.batchID, map[string]interface{}{
+			"total":        stats.total,
+			"processed":    stats.processed,
+			"successful":   stats.successful,
+			"failed":       stats.failed,
+			"extracted":    stats.extracted,
+			"status":       "processing",
+			"auto_approve": stats.autoApprove,
+			"started_at":   s.getBatchStartTime(stats.batchID),
+		})
 	}
-	close(jobs)
+}
 
-	wg.Wait()
-
-	s.setBatchStatus(batchID, map[string]interface{}{
-		"total":        len(files),
-		"processed":    processed,
-		"successful":   successful,
-		"failed":       failed,
-		"extracted":    extracted,
+func (s *DocumentService) finalizeBatch(stats *batchStats) {
+	s.setBatchStatus(stats.batchID, map[string]interface{}{
+		"total":        stats.total,
+		"processed":    stats.processed,
+		"successful":   stats.successful,
+		"failed":       stats.failed,
+		"extracted":    stats.extracted,
 		"status":       "completed",
-		"auto_approve": autoApprove,
-		"started_at":   s.getBatchStartTime(batchID),
+		"auto_approve": stats.autoApprove,
+		"started_at":   s.getBatchStartTime(stats.batchID),
 		"completed_at": time.Now().Format(time.RFC3339),
 	})
 
 	log.Printf("Batch %s completed: %d/%d successful, %d failed, %d extracted",
-		batchID, successful, len(files), failed, extracted)
+		stats.batchID, stats.successful, stats.total, stats.failed, stats.extracted)
 }
 
 func (s *DocumentService) processFileDataWithExtraction(

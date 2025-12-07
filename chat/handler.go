@@ -392,6 +392,7 @@ func (h *ChatHandler) DeleteConversation(ctx *gin.Context) {
 	util.SuccessResponse(ctx, "Conversation deleted successfully", nil)
 }
 
+
 func (h *ChatHandler) Ask(ctx *gin.Context) {
 	var req struct {
 		PlatformUniqueID string `json:"platform_unique_id" binding:"required"`
@@ -407,84 +408,22 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		return
 	}
 
-	if !h.wsClient.IsConnected() {
-		log.Println("WebSocket not connected, attempting to reconnect...")
-		if err := h.wsClient.Connect(); err != nil {
-			log.Printf("Failed to connect to WebSocket: %v", err)
+	h.ensureWebSocketConnection()
 
-		}
+	
+	conversation, err := h.resolveAskConversation(ctx, req.ConversationID)
+	if err != nil {
+		return 
 	}
 
-	var conversation *Conversation
-
-	if req.ConversationID != "" {
-		parsedUUID, err := uuid.Parse(req.ConversationID)
-		if err != nil {
-			util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid uuid format")
-			return
-		}
-
-		conversation, err = h.service.GetConversationByID(parsedUUID)
-		if err != nil && err != sql.ErrNoRows {
-			log.Println(err)
-			util.ErrorResponse(ctx, http.StatusBadRequest, "Error fetching conversation")
-			return
-		}
-	}
-
+	
 	if conversation != nil && conversation.IsHelpdesk {
-
-		err := h.messageService.HandleHelpdeskMessage(
-			conversation.ID,
-			req.Query,
-			"user",
-			conversation.Platform,
-			&conversation.PlatformUniqueID,
-			req.StartTimestamp,
-		)
-
-		if err != nil {
-			log.Println("Error handling helpdesk message:", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error sending message")
+		if handled := h.handleExistingHelpdesk(ctx, conversation, req.Query, req.StartTimestamp); handled {
 			return
 		}
-
-		existingHelpdesk, err := h.helpdeskService.GetBySessionID(conversation.ID.String())
-		if err != nil && err != sql.ErrNoRows {
-			log.Println("Error checking helpdesk:", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error get existing helpdesk")
-			return
-		}
-
-		if existingHelpdesk == nil {
-			err = h.helpdeskService.Create(&helpdesk.Helpdesk{
-				SessionID:        conversation.ID.String(),
-				Platform:         conversation.Platform,
-				PlatformUniqueID: &conversation.PlatformUniqueID,
-				Status:           "queue",
-			})
-
-			if err != nil {
-				log.Println("Error creating helpdesk:", err)
-				util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating helpdesk")
-				return
-			}
-		}
-
-		responseAsk := ResponseAsk{
-			User:             req.PlatformUniqueID,
-			ConversationID:   conversation.ID.String(),
-			Query:            req.Query,
-			Answer:           "",
-			IsHelpdesk:       true,
-			Platform:         conversation.Platform,
-			PlatformUniqueID: conversation.PlatformUniqueID,
-		}
-
-		util.SuccessResponse(ctx, "Message sent to agent queue", responseAsk)
-		return
 	}
 
+	
 	chatReq := external.ChatRequest{
 		PlatformUniqueID: req.PlatformUniqueID,
 		Query:            req.Query,
@@ -500,32 +439,140 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		return
 	}
 
-	conversationID, err := uuid.Parse(resp.ConversationID)
+	
+	finalConversation, err := h.ensureConversationFromResponse(req.Platform, req.PlatformUniqueID, resp)
 	if err != nil {
-		log.Println("Line 314", err)
-		util.ErrorResponse(ctx, http.StatusInternalServerError, "Invalid conversation ID from external API")
+		log.Println("Line 331", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating conversation")
 		return
 	}
 
-	conversation, err = h.service.GetConversationByID(conversationID)
+	
+	responseAsk := h.processAskResponseData(finalConversation, resp)
+
+	
+	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
+
+	
+	h.broadcastAskResponse(ctx, finalConversation, responseAsk)
+}
+
+
+
+
+
+func (h *ChatHandler) ensureWebSocketConnection() {
+	if !h.wsClient.IsConnected() {
+		log.Println("WebSocket not connected, attempting to reconnect...")
+		if err := h.wsClient.Connect(); err != nil {
+			log.Printf("Failed to connect to WebSocket: %v", err)
+		}
+	}
+}
+
+func (h *ChatHandler) resolveAskConversation(ctx *gin.Context, conversationID string) (*Conversation, error) {
+	if conversationID == "" {
+		return nil, nil
+	}
+
+	parsedUUID, err := uuid.Parse(conversationID)
 	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid uuid format")
+		return nil, err
+	}
+
+	conversation, err := h.service.GetConversationByID(parsedUUID)
+	if err != nil && err != sql.ErrNoRows {
+		log.Println(err)
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Error fetching conversation")
+		return nil, err
+	}
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	return conversation, nil
+}
+
+func (h *ChatHandler) handleExistingHelpdesk(ctx *gin.Context, conversation *Conversation, query, startTimestamp string) bool {
+	err := h.messageService.HandleHelpdeskMessage(
+		conversation.ID,
+		query,
+		"user",
+		conversation.Platform,
+		&conversation.PlatformUniqueID,
+		startTimestamp,
+	)
+
+	if err != nil {
+		log.Println("Error handling helpdesk message:", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Error sending message")
+		return true
+	}
+
+	existingHelpdesk, err := h.helpdeskService.GetBySessionID(conversation.ID.String())
+	if err != nil && err != sql.ErrNoRows {
+		log.Println("Error checking helpdesk:", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Error get existing helpdesk")
+		return true
+	}
+
+	if existingHelpdesk == nil {
+		err = h.helpdeskService.Create(&helpdesk.Helpdesk{
+			SessionID:        conversation.ID.String(),
+			Platform:         conversation.Platform,
+			PlatformUniqueID: &conversation.PlatformUniqueID,
+			Status:           "queue",
+		})
+
+		if err != nil {
+			log.Println("Error creating helpdesk:", err)
+			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating helpdesk")
+			return true
+		}
+	}
+
+	responseAsk := ResponseAsk{
+		User:             conversation.PlatformUniqueID,
+		ConversationID:   conversation.ID.String(),
+		Query:            query,
+		Answer:           "",
+		IsHelpdesk:       true,
+		Platform:         conversation.Platform,
+		PlatformUniqueID: conversation.PlatformUniqueID,
+	}
+
+	util.SuccessResponse(ctx, "Message sent to agent queue", responseAsk)
+	return true
+}
+
+func (h *ChatHandler) ensureConversationFromResponse(reqPlatform, reqUniqueID string, resp *external.ChatResponse) (*Conversation, error) {
+	conversationID, err := uuid.Parse(resp.ConversationID)
+	if err != nil {
+		log.Println("Line 314", err)
+		return nil, fmt.Errorf("invalid conversation ID from external API")
+	}
+
+	conversation, err := h.service.GetConversationByID(conversationID)
+	if err != nil {
+		
 		conversation = &Conversation{
 			ID:               conversationID,
 			StartTimestamp:   time.Now(),
-			Platform:         req.Platform,
-			PlatformUniqueID: req.PlatformUniqueID,
+			Platform:         reqPlatform,
+			PlatformUniqueID: reqUniqueID,
 			IsHelpdesk:       resp.IsHelpdesk,
 			Context:          nil,
 		}
 		if err := h.service.CreateConversation(conversation); err != nil {
-			log.Println("Line 331", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating conversation")
-			return
+			return nil, err
 		}
 	}
+	return conversation, nil
+}
 
-	channelName := conversationID.String()
-
+func (h *ChatHandler) processAskResponseData(conversation *Conversation, resp *external.ChatResponse) ResponseAsk {
 	var responseAnswer string
 	var responseCitations external.FlexibleCitationArray
 	var responseQuestionCategory []string
@@ -535,6 +582,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		responseCitations = external.FlexibleCitationArray{}
 		responseQuestionCategory = []string{}
 
+		
 		existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)
 		if err != nil || existingHelpdesk == nil {
 			err = h.helpdeskService.Create(&helpdesk.Helpdesk{
@@ -543,10 +591,8 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 				PlatformUniqueID: &conversation.PlatformUniqueID,
 				Status:           "Queue",
 			})
-
 			if err != nil {
 				log.Printf("Error creating helpdesk: %v", err)
-
 			}
 		}
 	} else {
@@ -555,7 +601,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		responseQuestionCategory = resp.QuestionCategory
 	}
 
-	responseAsk := ResponseAsk{
+	return ResponseAsk{
 		User:             resp.User,
 		ConversationID:   resp.ConversationID,
 		Query:            resp.Query,
@@ -571,45 +617,43 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		QuestionID:       resp.QuestionID,
 		AnswerID:         resp.AnswerID,
 	}
+}
 
+func (h *ChatHandler) broadcastAskResponse(ctx *gin.Context, conversation *Conversation, responseAsk ResponseAsk) {
 	if conversation.Platform == "web" {
 		if h.wsClient.IsConnected() {
+			channelName := conversation.ID.String()
 			publishData := map[string]interface{}{
-				"user":               resp.User,
-				"conversation_id":    resp.ConversationID,
-				"query":              resp.Query,
-				"rewritten_query":    resp.RewrittenQuery,
-				"category":           resp.Category,
-				"question_category":  responseQuestionCategory,
-				"answer":             responseAnswer,
-				"citations":          responseCitations,
-				"is_helpdesk":        resp.IsHelpdesk,
-				"is_answered":        resp.IsAnswered,
+				"user":               responseAsk.User,
+				"conversation_id":    responseAsk.ConversationID,
+				"query":              responseAsk.Query,
+				"rewritten_query":    responseAsk.RewrittenQuery,
+				"category":           responseAsk.Category,
+				"question_category":  responseAsk.QuestionCategory,
+				"answer":             responseAsk.Answer,
+				"citations":          responseAsk.Citations,
+				"is_helpdesk":        responseAsk.IsHelpdesk,
+				"is_answered":        responseAsk.IsAnswered,
 				"platform":           conversation.Platform,
 				"platform_unique_id": conversation.PlatformUniqueID,
 				"timestamp":          time.Now().Unix(),
-				"question_id":        resp.QuestionID,
-				"answer_id":          resp.AnswerID,
+				"question_id":        responseAsk.QuestionID,
+				"answer_id":          responseAsk.AnswerID,
 			}
 
 			if err := h.wsClient.Publish(channelName, publishData); err != nil {
 				log.Printf("Failed to publish to channel %s: %v", channelName, err)
-
 			} else {
 				log.Printf("✅ Published message to channel: %s", channelName)
 			}
 		}
 	} else {
-
 		err := h.externalClient.SendMessageToAPI(responseAsk)
 		if err != nil {
 			log.Printf("Error sending to Multi Channel API: %v", err)
-			util.ErrorResponse(ctx, http.StatusInternalServerError, "Error send to Multi Channel API")
-			return
+			
 		}
 	}
-
-	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 }
 
 func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {

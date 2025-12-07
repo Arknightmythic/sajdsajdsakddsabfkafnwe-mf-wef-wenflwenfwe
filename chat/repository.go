@@ -15,6 +15,11 @@ type ChatRepository struct {
 	db *sqlx.DB
 }
 
+type chatHistoryWithPlatform struct {
+	ChatHistory
+	PlatformUniqueID string `db:"platform_unique_id"`
+}
+
 func NewChatRepository(db *sqlx.DB) *ChatRepository {
 	return &ChatRepository{db: db}
 }
@@ -390,24 +395,30 @@ func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniq
 
 func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]ChatPair, int, error) {
 	
-	type ChatHistoryWithPlatform struct {
-		ChatHistory
-		PlatformUniqueID string `db:"platform_unique_id"`
+	histories, err := r.fetchRawHistories(sessionID, filter)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	var histories []ChatHistoryWithPlatform
+	
+	pairs := r.buildChatPairs(histories, filter)
+
+	
+	return r.sortAndPaginatePairs(pairs, filter)
+}
+
+func (r *ChatRepository) fetchRawHistories(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]chatHistoryWithPlatform, error) {
+	var histories []chatHistoryWithPlatform
 	var conditions []string
 	var args []interface{}
 	argIdx := 1
 
-	
 	if sessionID != nil {
 		conditions = append(conditions, fmt.Sprintf("ch.session_id = $%d", argIdx))
 		args = append(args, *sessionID)
 		argIdx++
 	}
 
-	
 	if filter.StartDate != nil {
 		conditions = append(conditions, fmt.Sprintf("ch.created_at >= $%d", argIdx))
 		args = append(args, *filter.StartDate)
@@ -420,124 +431,144 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 		argIdx++
 	}
 
-	
-	// Filter Search
-    if filter.Search != "" {
-        searchPattern := "%" + filter.Search + "%"
-
-        conditions = append(conditions, fmt.Sprintf(`(
+	if filter.Search != "" {
+		searchPattern := "%" + filter.Search + "%"
+		conditions = append(conditions, fmt.Sprintf(`(
             c.platform_unique_id ILIKE $%d OR 
             ch.session_id::text ILIKE $%d OR 
             ch.message ->> 'content' ILIKE $%d OR 
             ch.message -> 'data' ->> 'content' ILIKE $%d
         )`, argIdx, argIdx, argIdx, argIdx))
-        
-        args = append(args, searchPattern)
-        argIdx++
-    }
+		args = append(args, searchPattern)
+		argIdx++
+	}
 
-	
 	conditions = append(conditions, "c.is_helpdesk = false")
 
-	
 	where := ""
 	if len(conditions) > 0 {
 		where = isWHERE + strings.Join(conditions, " AND ")
 	}
 
-	
-	orderAndSort := "ORDER BY ch.session_id ASC, ch.created_at ASC, ch.id ASC"
-
-	
 	query := fmt.Sprintf(`
 		SELECT ch.id, ch.session_id, ch.message, ch.created_at, ch.user_id, ch.is_cannot_answer,
 			ch.category, ch.feedback, ch.question_category, ch.question_sub_category, ch.is_answered, 
 			ch.revision, ch.is_validated, 
-			c.platform_unique_id -- [BARU] Kolom tambahan
+			c.platform_unique_id
 		FROM chat_history ch 
 		JOIN conversations c ON ch.session_id = c.id
 		%s
-		%s
-	`, where, orderAndSort)
+		ORDER BY ch.session_id ASC, ch.created_at ASC, ch.id ASC
+	`, where)
 
 	if err := r.db.Select(&histories, query, args...); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	
+	return histories, nil
+}
+
+func (r *ChatRepository) buildChatPairs(histories []chatHistoryWithPlatform, filter ChatHistoryFilter) []ChatPair {
 	var pairs []ChatPair
 	for i := 0; i < len(histories); i += 2 {
 		if i+1 >= len(histories) {
 			break
 		}
 
-		userRole := getMessageRole(histories[i].ChatHistory.Message)
-		assistantRole := getMessageRole(histories[i+1].ChatHistory.Message)
+		pair, isValidPair := r.createPairFromHistory(histories[i], histories[i+1])
 
-		
-		if userRole == "user" && assistantRole == "assistant" && histories[i].SessionID == histories[i+1].SessionID {
-			questionContent := extractContent(histories[i].ChatHistory.Message)
-			answerContent := extractContent(histories[i+1].ChatHistory.Message)
-
-			pair := ChatPair{
-				QuestionID:       histories[i].ID,
-				QuestionContent:  questionContent,
-				QuestionTime:     histories[i].CreatedAt,
-				AnswerID:         histories[i+1].ID,
-				AnswerContent:    answerContent,
-				AnswerTime:       histories[i+1].CreatedAt,
-				Category:         histories[i].Category,
-				QuestionCategory: histories[i].QuestionCategory,
-				Feedback:         histories[i+1].Feedback,
-				IsCannotAnswer:   histories[i+1].IsCannotAnswer,
-				Revision:         histories[i+1].Revision,
-				SessionID:        histories[i].SessionID,
-				IsValidated:      histories[i+1].IsValidated,
-				IsAnswered:       histories[i+1].IsAnswered,
-				CreatedAt:        histories[i].CreatedAt,
-				
-				PlatformUniqueID: histories[i].PlatformUniqueID,
+		if isValidPair {
+			if r.shouldIncludePair(pair, filter) {
+				pairs = append(pairs, pair)
 			}
-
-			
-			if filter.IsValidated != nil {
-				reqVal := *filter.IsValidated
-				isValidated := pair.IsValidated
-
-				if reqVal == "null" {
-					if isValidated != nil {
-						continue
-					}
-				} else if reqVal == "1" {
-					if isValidated == nil || !*isValidated {
-						continue
-					}
-				} else if reqVal == "0" {
-					if isValidated == nil || *isValidated {
-						continue
-					}
-				}
-			}
-
-			if filter.IsAnswered != nil {
-				reqVal := *filter.IsAnswered
-				isAnswered := pair.IsAnswered
-				currentVal := false
-				if isAnswered != nil {
-					currentVal = *isAnswered
-				}
-				if currentVal != reqVal {
-					continue
-				}
-			}
-
-			pairs = append(pairs, pair)
 		} else {
+			
+			
 			
 			i--
 		}
 	}
+	return pairs
+}
 
+func (r *ChatRepository) createPairFromHistory(q, a chatHistoryWithPlatform) (ChatPair, bool) {
+	userRole := getMessageRole(q.ChatHistory.Message)
+	assistantRole := getMessageRole(a.ChatHistory.Message)
+
+	if userRole == "user" && assistantRole == "assistant" && q.SessionID == a.SessionID {
+		return ChatPair{
+			QuestionID:       q.ID,
+			QuestionContent:  extractContent(q.ChatHistory.Message),
+			QuestionTime:     q.CreatedAt,
+			AnswerID:         a.ID,
+			AnswerContent:    extractContent(a.ChatHistory.Message),
+			AnswerTime:       a.CreatedAt,
+			Category:         q.Category,
+			QuestionCategory: q.QuestionCategory,
+			Feedback:         a.Feedback,
+			IsCannotAnswer:   a.IsCannotAnswer,
+			Revision:         a.Revision,
+			SessionID:        q.SessionID,
+			IsValidated:      a.IsValidated,
+			IsAnswered:       a.IsAnswered,
+			CreatedAt:        q.CreatedAt,
+			PlatformUniqueID: q.PlatformUniqueID,
+		}, true
+	}
+	return ChatPair{}, false
+}
+
+func (r *ChatRepository) shouldIncludePair(pair ChatPair, filter ChatHistoryFilter) bool {
+	if !r.matchValidatedFilter(pair, filter.IsValidated) {
+		return false
+	}
+
+	if !r.matchAnsweredFilter(pair, filter.IsAnswered) {
+		return false
+	}
+
+	return true
+}
+
+// ==================================================================================
+// HELPER FUNCTIONS (Tambahkan di bawah shouldIncludePair)
+// ==================================================================================
+
+func (r *ChatRepository) matchValidatedFilter(pair ChatPair, filterVal *string) bool {
+	if filterVal == nil {
+		return true
+	}
+
+	reqVal := *filterVal
+	isValidated := pair.IsValidated
+
+	if reqVal == "null" && isValidated != nil {
+		return false
+	}
+	if reqVal == "1" && (isValidated == nil || !*isValidated) {
+		return false
+	}
+	if reqVal == "0" && (isValidated == nil || *isValidated) {
+		return false
+	}
+	return true
+}
+
+func (r *ChatRepository) matchAnsweredFilter(pair ChatPair, filterVal *bool) bool {
+	if filterVal == nil {
+		return true
+	}
+
+	reqVal := *filterVal
+	currentVal := false
+	if pair.IsAnswered != nil {
+		currentVal = *pair.IsAnswered
+	}
+
+	return currentVal == reqVal
+}
+
+func (r *ChatRepository) sortAndPaginatePairs(pairs []ChatPair, filter ChatHistoryFilter) ([]ChatPair, int, error) {
 	
 	if strings.ToUpper(filter.SortDirection) == "DESC" || filter.SortDirection == "" {
 		sort.SliceStable(pairs, func(i, j int) bool {
@@ -551,7 +582,6 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 
 	
 	total := len(pairs)
-
 	if filter.Limit <= 0 {
 		filter.Limit = 10
 	}
