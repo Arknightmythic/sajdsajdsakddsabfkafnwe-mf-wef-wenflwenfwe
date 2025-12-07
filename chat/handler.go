@@ -549,6 +549,13 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 			}
 		}
+	if !conversation.IsHelpdesk {
+            conversation.IsHelpdesk = true
+            // Pastikan EndTimestamp tidak nil jika required, atau biarkan existing
+            if err := h.service.UpdateConversation(conversation); err != nil {
+                log.Printf("Failed to update conversation is_helpdesk status: %v", err)
+            }
+        }
 	} else {
 		responseAnswer = resp.Answer
 		responseCitations = resp.Citations
