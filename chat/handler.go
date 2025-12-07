@@ -449,11 +449,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 	
 	responseAsk := h.processAskResponseData(finalConversation, resp)
-
-	
 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
-
-	
 	h.broadcastAskResponse(ctx, finalConversation, responseAsk)
 }
 
@@ -595,6 +591,13 @@ func (h *ChatHandler) processAskResponseData(conversation *Conversation, resp *e
 				log.Printf("Error creating helpdesk: %v", err)
 			}
 		}
+	if !conversation.IsHelpdesk {
+            conversation.IsHelpdesk = true
+            // Pastikan EndTimestamp tidak nil jika required, atau biarkan existing
+            if err := h.service.UpdateConversation(conversation); err != nil {
+                log.Printf("Failed to update conversation is_helpdesk status: %v", err)
+            }
+        }
 	} else {
 		responseAnswer = resp.Answer
 		responseCitations = resp.Citations
