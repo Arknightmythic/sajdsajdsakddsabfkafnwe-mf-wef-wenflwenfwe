@@ -10,6 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const(
+	isInvalidBody = "Invalid request body"
+	isInvalidHDId = "Invalid helpdesk ID"
+)
+
 type HelpdeskHandler struct {
 	service        *HelpdeskService
 	messageService *messaging.MessageService
@@ -39,7 +44,7 @@ func (h *HelpdeskHandler) UpdateSwitchStatus(ctx *gin.Context) {
 	
 	// Gunakan ShouldBindJSON untuk mapping true/false dari JSON body
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
 		return
 	}
 
@@ -61,7 +66,7 @@ func (h *HelpdeskHandler) CreateHelpdesk(ctx *gin.Context) {
 		UserID           int     `json:"user_id"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
 		return
 	}
 
@@ -113,7 +118,7 @@ func (h *HelpdeskHandler) GetAll(ctx *gin.Context) {
 func (h *HelpdeskHandler) GetHelpdeskByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid helpdesk ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidHDId)
 		return
 	}
 
@@ -129,13 +134,13 @@ func (h *HelpdeskHandler) GetHelpdeskByID(ctx *gin.Context) {
 func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid helpdesk ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidHDId)
 		return
 	}
 
 	var req map[string]interface{}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
 		return
 	}
 
@@ -170,7 +175,7 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&fullReq); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
 		return
 	}
 
@@ -200,7 +205,7 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 func (h *HelpdeskHandler) DeleteHelpdesk(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid helpdesk ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidHDId)
 		return
 	}
 
@@ -221,7 +226,7 @@ func (h *HelpdeskHandler) AskHelpdesk(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
 		return
 	}
 

@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const isInvalidPermissionID = "Invalid permission ID"
+
 type PermissionHandler struct {
 	service *PermissionService
 }
@@ -50,7 +52,7 @@ func (h *PermissionHandler) GetPermissions(ctx *gin.Context) {
 func (h *PermissionHandler) GetPermissionByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid permission ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidPermissionID)
 		return
 	}
 
@@ -66,7 +68,7 @@ func (h *PermissionHandler) GetPermissionByID(ctx *gin.Context) {
 func (h *PermissionHandler) UpdatePermission(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid permission ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidPermissionID)
 		return
 	}
 
@@ -94,7 +96,7 @@ func (h *PermissionHandler) UpdatePermission(ctx *gin.Context) {
 func (h *PermissionHandler) DeletePermission(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid permission ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidPermissionID)
 		return
 	}
 

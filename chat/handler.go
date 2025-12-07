@@ -19,6 +19,14 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	invalidRequestBody   = "Invalid request body"
+	invalidDateFormat    = "Invalid date format: %v"
+	invalidChatHistoryID = "Invalid chat history ID"
+	invalidSessionID     = "Invalid session ID"
+	invalidConversationID = "Invalid conversation ID"
+)
+
 type ChatHandler struct {
 	service         *ChatService
 	externalClient  *external.Client
@@ -59,7 +67,7 @@ func (h *ChatHandler) CreateChatHistory(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidRequestBody)
 		return
 	}
 
@@ -104,7 +112,7 @@ func (h *ChatHandler) GetChatHistories(ctx *gin.Context) {
 
 	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf(invalidDateFormat, err))
 		return
 	}
 
@@ -129,7 +137,7 @@ func (h *ChatHandler) GetChatHistories(ctx *gin.Context) {
 func (h *ChatHandler) GetChatHistoryByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid chat history ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidChatHistoryID)
 		return
 	}
 
@@ -145,7 +153,7 @@ func (h *ChatHandler) GetChatHistoryByID(ctx *gin.Context) {
 func (h *ChatHandler) GetChatHistoryBySessionID(ctx *gin.Context) {
 	sessionID, err := uuid.Parse(ctx.Param("session_id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid session ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID )
 		return
 	}
 
@@ -161,7 +169,7 @@ func (h *ChatHandler) GetChatHistoryBySessionID(ctx *gin.Context) {
 
 	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf(invalidDateFormat, err))
 		return
 	}
 
@@ -186,7 +194,7 @@ func (h *ChatHandler) GetChatHistoryBySessionID(ctx *gin.Context) {
 func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid chat history ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidChatHistoryID)
 		return
 	}
 
@@ -204,7 +212,7 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidRequestBody)
 		return
 	}
 
@@ -233,7 +241,7 @@ func (h *ChatHandler) UpdateChatHistory(ctx *gin.Context) {
 func (h *ChatHandler) DeleteChatHistory(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid chat history ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidChatHistoryID)
 		return
 	}
 
@@ -254,7 +262,7 @@ func (h *ChatHandler) CreateConversation(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidRequestBody)
 		return
 	}
 
@@ -288,7 +296,7 @@ func (h *ChatHandler) GetConversations(ctx *gin.Context) {
 
 	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf(invalidDateFormat, err))
 		return
 	}
 
@@ -319,7 +327,7 @@ func (h *ChatHandler) GetConversations(ctx *gin.Context) {
 func (h *ChatHandler) GetConversationByID(ctx *gin.Context) {
 	id, err := uuid.Parse(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid conversation ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidConversationID)
 		return
 	}
 
@@ -335,7 +343,7 @@ func (h *ChatHandler) GetConversationByID(ctx *gin.Context) {
 func (h *ChatHandler) UpdateConversation(ctx *gin.Context) {
 	id, err := uuid.Parse(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid conversation ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidConversationID)
 		return
 	}
 
@@ -348,7 +356,7 @@ func (h *ChatHandler) UpdateConversation(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidRequestBody)
 		return
 	}
 
@@ -372,7 +380,7 @@ func (h *ChatHandler) UpdateConversation(ctx *gin.Context) {
 func (h *ChatHandler) DeleteConversation(ctx *gin.Context) {
 	id, err := uuid.Parse(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid conversation ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidConversationID)
 		return
 	}
 
@@ -395,7 +403,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		log.Println("Line 293", err)
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidRequestBody)
 		return
 	}
 
@@ -611,7 +619,7 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 	if sessionIDParam != "" && sessionIDParam != "all" {
 		parsed, err := uuid.Parse(sessionIDParam)
 		if err != nil {
-			util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid session ID")
+			util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID )
 			return
 		}
 		sessionID = &parsed
@@ -629,7 +637,7 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 
 	startDatePtr, endDatePtr, err := parseDateRange(ctx.Query("start_date"), ctx.Query("end_date"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf("Invalid date format: %v", err))
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf(invalidDateFormat, err))
 		return
 	}
 
@@ -670,7 +678,7 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 func (h *ChatHandler) DebugChatHistory(ctx *gin.Context) {
 	sessionID, err := uuid.Parse(ctx.Param("session_id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid session ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID )
 		return
 	}
 
@@ -712,7 +720,7 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidRequestBody)
 		return
 	}
 
@@ -804,7 +812,7 @@ func (h *ChatHandler) Feedback(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidRequestBody)
 		return
 	}
 

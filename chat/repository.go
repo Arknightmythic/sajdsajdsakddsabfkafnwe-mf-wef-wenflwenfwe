@@ -9,6 +9,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+const isWHERE = "WHERE "
+
 type ChatRepository struct {
 	db *sqlx.DB
 }
@@ -59,7 +61,7 @@ func (r *ChatRepository) GetAllChatHistory(filter ChatHistoryFilter) ([]ChatHist
 
 	where := ""
 	if len(conditions) > 0 {
-		where = "WHERE " + strings.Join(conditions, " AND ")
+		where = isWHERE + strings.Join(conditions, " AND ")
 	}
 
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM chat_history %s", where)
@@ -139,7 +141,7 @@ func (r *ChatRepository) GetChatHistoryBySessionID(sessionID uuid.UUID, filter C
 		argIdx++
 	}
 
-	where := "WHERE " + strings.Join(conditions, " AND ")
+	where := isWHERE + strings.Join(conditions, " AND ")
 
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM chat_history %s", where)
 	var total int
@@ -258,7 +260,7 @@ func (r *ChatRepository) GetAllConversations(filter ConversationFilter) ([]Conve
 		argIdx++
 	}
 
-	where := "WHERE " + strings.Join(conditions, " AND ")
+	where := isWHERE + strings.Join(conditions, " AND ")
 
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM conversations %s", where)
 	var total int
@@ -440,7 +442,7 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 	
 	where := ""
 	if len(conditions) > 0 {
-		where = "WHERE " + strings.Join(conditions, " AND ")
+		where = isWHERE + strings.Join(conditions, " AND ")
 	}
 
 	

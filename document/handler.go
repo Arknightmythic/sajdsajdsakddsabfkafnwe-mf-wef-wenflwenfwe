@@ -18,6 +18,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	urlViewFile = "%s/api/documents/view-file?token=%s"
+	successViewResponse = "View URL generated successfully"
+	emailNotFoundResponse = "User email not found"
+	accountNotFoundResponse = "Account type not found"
+)
+
 type DocumentHandler struct {
 	service *DocumentService
 	redis   *redis.Client
@@ -46,9 +53,9 @@ func (h *DocumentHandler) GenerateViewURL(ctx *gin.Context) {
 	}
 
 	baseURL := "https://" + ctx.Request.Host
-	viewURL := fmt.Sprintf("%s/api/documents/view-file?token=%s", baseURL, token)
+	viewURL := fmt.Sprintf(urlViewFile, baseURL, token)
 
-	util.SuccessResponse(ctx, "View URL generated successfully", gin.H{
+	util.SuccessResponse(ctx, successViewResponse, gin.H{
 		"url": viewURL,
 	})
 }
@@ -77,9 +84,9 @@ func (h *DocumentHandler) GenerateViewURLByID(ctx *gin.Context) {
 	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
 	
 	
-	viewURL := fmt.Sprintf("%s/api/documents/view-file?token=%s", baseURL, token)
+	viewURL := fmt.Sprintf(urlViewFile, baseURL, token)
 
-	util.SuccessResponse(ctx, "View URL generated successfully", gin.H{
+	util.SuccessResponse(ctx, successViewResponse, gin.H{
 		"url": viewURL,
 	})
 }
@@ -185,13 +192,13 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 
 	email, exists := ctx.Get("email")
 	if !exists {
-		util.ErrorResponse(ctx, http.StatusUnauthorized, "User email not found")
+		util.ErrorResponse(ctx, http.StatusUnauthorized, emailNotFoundResponse)
 		return
 	}
 
 	
 	if !exists {
-		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
+		util.ErrorResponse(ctx, http.StatusUnauthorized, accountNotFoundResponse)
 		return
 	}
 	teamName := h.getTeamNameForUser(ctx)
@@ -409,13 +416,13 @@ func (h *DocumentHandler) UpdateDocument(ctx *gin.Context) {
 
 	email, exists := ctx.Get("email")
 	if !exists {
-		util.ErrorResponse(ctx, http.StatusUnauthorized, "User email not found")
+		util.ErrorResponse(ctx, http.StatusUnauthorized, emailNotFoundResponse)
 		return
 	}
 
 	
 	if !exists {
-		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
+		util.ErrorResponse(ctx, http.StatusUnauthorized, accountNotFoundResponse)
 		return
 	}
 
@@ -643,13 +650,13 @@ func (h *DocumentHandler) BatchUploadDocument(ctx *gin.Context) {
 
 	email, exists := ctx.Get("email")
 	if !exists {
-		util.ErrorResponse(ctx, http.StatusUnauthorized, "User email not found")
+		util.ErrorResponse(ctx, http.StatusUnauthorized, emailNotFoundResponse)
 		return
 	}
 
 	
 	if !exists {
-		util.ErrorResponse(ctx, http.StatusUnauthorized, "Account type not found")
+		util.ErrorResponse(ctx, http.StatusUnauthorized, accountNotFoundResponse)
 		return
 	}
 	teamName := h.getTeamNameForUser(ctx)
@@ -754,9 +761,9 @@ func (h *DocumentHandler) GenerateViewURLByDocumentID(ctx *gin.Context) {
 	}
 
 	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
-	viewURL := fmt.Sprintf("%s/api/documents/view-file?token=%s", baseURL, token)
+	viewURL := fmt.Sprintf(urlViewFile, baseURL, token)
 
-	util.SuccessResponse(ctx, "View URL generated successfully", gin.H{
+	util.SuccessResponse(ctx, successViewResponse, gin.H{
 		"url": viewURL,
 	})
 }

@@ -15,6 +15,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	refreshToken = "refresh_token:%d:%s"
+	userSession = "user_sessions:%d"
+)
+
 type UserService struct {
 	repo        *UserRepository
 	Redis       *redis.Client
@@ -169,13 +174,13 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 	}
 
 	ctx := context.Background()
-	key := fmt.Sprintf("refresh_token:%d:%s", user.ID, sessionID)
+	key := fmt.Sprintf(refreshToken, user.ID, sessionID)
 	err = s.Redis.Set(ctx, key, refreshToken, 7*24*time.Hour).Err()
 	if err != nil {
 		return nil, errors.New("failed to store refresh token")
 	}
 
-	sessionSetKey := fmt.Sprintf("user_sessions:%d", user.ID)
+	sessionSetKey := fmt.Sprintf(userSession, user.ID)
 	err = s.Redis.SAdd(ctx, sessionSetKey, sessionID).Err()
 	if err != nil {
 		return nil, errors.New("failed to register session")
@@ -201,27 +206,27 @@ func (s *UserService) Login(email, password string) (*LoginResponse, error) {
 func (s *UserService) Logout(userID int64, sessionID string) error {
 	ctx := context.Background()
 
-	key := fmt.Sprintf("refresh_token:%d:%s", userID, sessionID)
+	key := fmt.Sprintf(refreshToken, userID, sessionID)
 	err := s.Redis.Del(ctx, key).Err()
 	if err != nil {
 		return err
 	}
 
-	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	sessionSetKey := fmt.Sprintf(userSession, userID)
 	return s.Redis.SRem(ctx, sessionSetKey, sessionID).Err()
 }
 
 func (s *UserService) LogoutAllSessions(userID int64) error {
 	ctx := context.Background()
 
-	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	sessionSetKey := fmt.Sprintf(userSession, userID)
 	sessions, err := s.Redis.SMembers(ctx, sessionSetKey).Result()
 	if err != nil {
 		return err
 	}
 
 	for _, sessionID := range sessions {
-		key := fmt.Sprintf("refresh_token:%d:%s", userID, sessionID)
+		key := fmt.Sprintf(refreshToken, userID, sessionID)
 		s.Redis.Del(ctx, key)
 	}
 
@@ -237,7 +242,7 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 	userID := claims.UserID
 	ctx := context.Background()
 
-	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	sessionSetKey := fmt.Sprintf(userSession, userID)
 	sessions, err := s.Redis.SMembers(ctx, sessionSetKey).Result()
 	if err != nil {
 		return "", errors.New("failed to retrieve sessions")
@@ -245,7 +250,7 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 
 	var foundSession string
 	for _, sessionID := range sessions {
-		key := fmt.Sprintf("refresh_token:%d:%s", userID, sessionID)
+		key := fmt.Sprintf(refreshToken, userID, sessionID)
 		storedToken, err := s.Redis.Get(ctx, key).Result()
 		if err == nil && storedToken == refreshToken {
 			foundSession = sessionID
@@ -272,6 +277,6 @@ func (s *UserService) RefreshAccessToken(refreshToken string) (string, error) {
 
 func (s *UserService) GetActiveSessions(userID int64) ([]string, error) {
 	ctx := context.Background()
-	sessionSetKey := fmt.Sprintf("user_sessions:%d", userID)
+	sessionSetKey := fmt.Sprintf(userSession, userID)
 	return s.Redis.SMembers(ctx, sessionSetKey).Result()
 }

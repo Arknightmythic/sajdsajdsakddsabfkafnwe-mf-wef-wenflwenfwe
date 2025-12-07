@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const isInvalidTeamId = "Invalid team ID"
+
 type TeamHandler struct {
 	service *TeamService
 }
@@ -75,7 +77,7 @@ func (h *TeamHandler) GetAll(ctx *gin.Context) {
 func (h *TeamHandler) GetTeamByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid team ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidTeamId)
 		return
 	}
 
@@ -91,7 +93,7 @@ func (h *TeamHandler) GetTeamByID(ctx *gin.Context) {
 func (h *TeamHandler) UpdateTeam(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid team ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidTeamId)
 		return
 	}
 
@@ -121,7 +123,7 @@ func (h *TeamHandler) UpdateTeam(ctx *gin.Context) {
 func (h *TeamHandler) DeleteTeam(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid team ID")
+		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidTeamId)
 		return
 	}
 

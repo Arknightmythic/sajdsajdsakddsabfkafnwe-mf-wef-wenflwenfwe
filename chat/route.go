@@ -11,6 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 )
+const(
+	urlHistoryID = "/history/:id"
+	urConversationID = "/conversations/:id"
+) 
 
 func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	repo := NewChatRepository(db)
@@ -40,10 +44,10 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	{
 		chatRoutes.POST("/history", handler.CreateChatHistory)
 		chatRoutes.GET("/history", handler.GetChatHistories)
-		chatRoutes.GET("/history/:id", handler.GetChatHistoryByID)
+		chatRoutes.GET(urlHistoryID, handler.GetChatHistoryByID)
 		chatRoutes.GET("/history/session/:session_id", handler.GetChatHistoryBySessionID)
-		chatRoutes.PUT("/history/:id", handler.UpdateChatHistory)
-		chatRoutes.DELETE("/history/:id", handler.DeleteChatHistory)
+		chatRoutes.PUT(urlHistoryID, handler.UpdateChatHistory)
+		chatRoutes.DELETE(urlHistoryID, handler.DeleteChatHistory)
 
 		chatRoutes.GET("/pairs/session/:session_id", handler.GetChatPairsBySessionID)
 		chatRoutes.GET("/pairs/all", handler.GetChatPairsBySessionID)
@@ -51,9 +55,9 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 		chatRoutes.POST("/conversations", handler.CreateConversation)
 		chatRoutes.GET("/conversations", handler.GetConversations)
-		chatRoutes.GET("/conversations/:id", handler.GetConversationByID)
-		chatRoutes.PUT("/conversations/:id", handler.UpdateConversation)
-		chatRoutes.DELETE("/conversations/:id", handler.DeleteConversation)
+		chatRoutes.GET(urConversationID, handler.GetConversationByID)
+		chatRoutes.PUT(urConversationID, handler.UpdateConversation)
+		chatRoutes.DELETE(urConversationID, handler.DeleteConversation)
 
 		chatRoutes.POST("/ask", handler.Ask)
 		chatRoutes.POST("/validate", handler.ValidateAnswer)

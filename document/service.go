@@ -21,6 +21,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const isBatchUpload = "batch_upload:"
+
 type DocumentService struct {
 	repo           *DocumentRepository
 	redis          *redis.Client
@@ -482,7 +484,7 @@ func (s *DocumentService) processFileDataWithExtraction(
 }
 
 func (s *DocumentService) setBatchStatus(batchID string, status map[string]interface{}) error {
-	key := "batch_upload:" + batchID
+	key := isBatchUpload + batchID
 	data, err := json.Marshal(status)
 	if err != nil {
 		return fmt.Errorf("failed to marshal status: %w", err)
@@ -493,7 +495,7 @@ func (s *DocumentService) setBatchStatus(batchID string, status map[string]inter
 }
 
 func (s *DocumentService) getBatchStartTime(batchID string) string {
-	key := "batch_upload:" + batchID
+	key := isBatchUpload + batchID
 	ctx := context.Background()
 
 	data, err := s.redis.Get(ctx, key).Result()
@@ -513,7 +515,7 @@ func (s *DocumentService) getBatchStartTime(batchID string) string {
 }
 
 func (s *DocumentService) GetBatchStatus(batchID string) (map[string]interface{}, error) {
-	key := "batch_upload:" + batchID
+	key := isBatchUpload + batchID
 	ctx := context.Background()
 
 	data, err := s.redis.Get(ctx, key).Result()

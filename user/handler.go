@@ -9,6 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	isInvalidInput = "Invalid input"
+	isInvalidUser = "Invalid user ID"
+	isNotAuthenticated = "User not authenticated"
+) 
+
 type UserHandler struct {
 	Service *UserService
 }
@@ -64,7 +70,7 @@ func getCookieSettings() (domain string, path string, secure bool, httpOnly bool
 func (h *UserHandler) CreateUser(c *gin.Context) {
 	var user User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid input")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidInput)
 		return
 	}
 
@@ -97,7 +103,7 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid user ID")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidUser)
 		return
 	}
 
@@ -114,13 +120,13 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid user ID")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidUser)
 		return
 	}
 
 	var user User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid input")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidInput)
 		return
 	}
 
@@ -137,7 +143,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid user ID")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidUser)
 		return
 	}
 
@@ -153,7 +159,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 func (h *UserHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid input")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidInput)
 		return
 	}
 
@@ -204,7 +210,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 func (h *UserHandler) Logout(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		util.ErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		util.ErrorResponse(c, http.StatusUnauthorized, isNotAuthenticated)
 		return
 	}
 
@@ -237,7 +243,7 @@ func (h *UserHandler) Logout(c *gin.Context) {
 func (h *UserHandler) LogoutAllSessions(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		util.ErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		util.ErrorResponse(c, http.StatusUnauthorized, isNotAuthenticated)
 		return
 	}
 
@@ -264,7 +270,7 @@ func (h *UserHandler) LogoutAllSessions(c *gin.Context) {
 func (h *UserHandler) GetActiveSessions(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		util.ErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		util.ErrorResponse(c, http.StatusUnauthorized, isNotAuthenticated)
 		return
 	}
 
@@ -314,7 +320,7 @@ func (h *UserHandler) RefreshToken(c *gin.Context) {
 func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		util.ErrorResponse(c, http.StatusUnauthorized, "User not authenticated")
+		util.ErrorResponse(c, http.StatusUnauthorized, isNotAuthenticated)
 		return
 	}
 

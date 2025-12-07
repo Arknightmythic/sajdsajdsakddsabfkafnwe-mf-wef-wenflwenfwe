@@ -14,6 +14,13 @@ import (
 	"strings"
 )
 
+const (
+	isFailedToRequest = "failed to create request: %w"
+	isContentType = "Content-Type"
+	isXAPI = "X-API-Key"
+	isFailedToSend = "failed to send request: %w"
+)
+
 type Client struct {
 	baseURL     string
 	messagesURL string
@@ -204,15 +211,15 @@ func (c *Client) ExtractDocument(req ExtractRequest) error {
 	url := c.baseURL + endpoint
 	httpReq, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf(isFailedToRequest, err)
 	}
 
-	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-	httpReq.Header.Set("X-API-Key", os.Getenv("X_API_KEY"))
+	httpReq.Header.Set(isContentType, writer.FormDataContentType())
+	httpReq.Header.Set(isXAPI, os.Getenv("X_API_KEY"))
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		return fmt.Errorf(isFailedToSend, err)
 	}
 	defer resp.Body.Close()
 
@@ -232,7 +239,7 @@ func (c *Client) DeleteDocument(req DeleteRequest) error {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
 
-	httpReq.Header.Set("X-API-Key", os.Getenv("X_API_KEY"))
+	httpReq.Header.Set(isXAPI, os.Getenv("X_API_KEY"))
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -258,15 +265,15 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 
 	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf(isFailedToRequest, err)
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-API-Key", os.Getenv("X_API_KEY"))
+	httpReq.Header.Set(isContentType, "application/json")
+	httpReq.Header.Set(isXAPI, os.Getenv("X_API_KEY"))
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf(isFailedToSend, err)
 	}
 
 	defer resp.Body.Close()
@@ -310,17 +317,17 @@ func (c *Client) SendMessageToAPI(data interface{}) error {
 
 	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf(isFailedToRequest, err)
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-API-Key", os.Getenv("MESSAGES_API_KEY"))
+	httpReq.Header.Set(isContentType, "application/json")
+	httpReq.Header.Set(isXAPI, os.Getenv("MESSAGES_API_KEY"))
 
 	log.Println("MESSAGE API KEY -> ", c.messagesURL+"/api/send/reply")
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		return fmt.Errorf(isFailedToSend, err)
 	}
 	defer resp.Body.Close()
 

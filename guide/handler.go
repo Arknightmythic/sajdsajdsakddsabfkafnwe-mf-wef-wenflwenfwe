@@ -15,6 +15,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const isInvalidID = "Invalid ID"
+
 type GuideHandler struct {
 	service *GuideService
 	redis   *redis.Client
@@ -86,7 +88,7 @@ func (h *GuideHandler) GetAll(c *gin.Context) {
 func (h *GuideHandler) GetByID(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid ID")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidID)
 		return
 	}
 
@@ -102,7 +104,7 @@ func (h *GuideHandler) GetByID(c *gin.Context) {
 func (h *GuideHandler) UpdateGuide(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid ID")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidID)
 		return
 	}
 
@@ -135,7 +137,7 @@ func (h *GuideHandler) UpdateGuide(c *gin.Context) {
 func (h *GuideHandler) DeleteGuide(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		util.ErrorResponse(c, http.StatusBadRequest, "Invalid ID")
+		util.ErrorResponse(c, http.StatusBadRequest, isInvalidID)
 		return
 	}
 

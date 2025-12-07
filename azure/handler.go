@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const loginFailedURLTemplate = "%s?status=login-failed&error=%s"
+
 type AzureHandler struct {
 	Service *AzureService
 }
@@ -90,7 +92,8 @@ func (h *AzureHandler) Callback(c *gin.Context) {
 
 	if errorParam != "" {
 		fmt.Printf("Azure returned error: %s - %s\n", errorParam, errorDesc)
-		frontendURL := fmt.Sprintf("%s?status=login-failed&error=%s",
+		
+		frontendURL := fmt.Sprintf(loginFailedURLTemplate,
 			h.Service.Config.FrontendCallbackURL,
 			url.QueryEscape(errorDesc))
 		c.Redirect(http.StatusFound, frontendURL)
@@ -99,7 +102,8 @@ func (h *AzureHandler) Callback(c *gin.Context) {
 
 	if code == "" {
 		fmt.Println("No authorization code received")
-		frontendURL := fmt.Sprintf("%s?status=login-failed&error=%s",
+		
+		frontendURL := fmt.Sprintf(loginFailedURLTemplate,
 			h.Service.Config.FrontendCallbackURL,
 			url.QueryEscape("No authorization code received"))
 		c.Redirect(http.StatusFound, frontendURL)
@@ -109,7 +113,8 @@ func (h *AzureHandler) Callback(c *gin.Context) {
 	loginResp, err := h.Service.ProcessAzureLogin(code)
 	if err != nil {
 		fmt.Printf("Azure login processing error: %v\n", err)
-		frontendURL := fmt.Sprintf("%s?status=login-failed&error=%s",
+		
+		frontendURL := fmt.Sprintf(loginFailedURLTemplate,
 			h.Service.Config.FrontendCallbackURL,
 			url.QueryEscape(err.Error()))
 		c.Redirect(http.StatusFound, frontendURL)

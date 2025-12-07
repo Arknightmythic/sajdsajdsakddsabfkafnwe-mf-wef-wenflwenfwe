@@ -12,6 +12,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+const Agent = "-agent"
+
 type MessageService struct {
 	db             *sqlx.DB
 	wsClient       *config.WebSocketClient
@@ -146,7 +148,7 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 
 	if platform == "web" {
 		mainChannel := sessionID.String()
-		agentChannel := sessionID.String() + "-agent"
+		agentChannel := sessionID.String() + Agent
 
 		if err := s.PublishToChannel(mainChannel, publishData); err != nil {
 			log.Printf("Failed to publish to main channel: %v", err)
@@ -184,7 +186,7 @@ func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message stri
 			log.Printf("✅ Sent agent message to external API for platform: %s", platform)
 		} else {
 
-			agentChannel := sessionID.String() + "-agent"
+			agentChannel := sessionID.String() + Agent
 			if err := s.PublishToChannel(agentChannel, publishData); err != nil {
 				log.Printf("Failed to publish user message to agent channel: %v", err)
 			}
@@ -201,7 +203,7 @@ func (s *MessageService) SubscribeToHelpdeskChannels(sessionID string) error {
 		return fmt.Errorf("failed to subscribe to user channel: %w", err)
 	}
 
-	agentChannel := sessionID + "-agent"
+	agentChannel := sessionID + Agent
 	if err := s.wsClient.Subscribe(agentChannel, "$"); err != nil {
 		return fmt.Errorf("failed to subscribe to agent channel: %w", err)
 	}

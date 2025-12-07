@@ -3,8 +3,17 @@ package document
 import (
 	"fmt"
 	"strings"
-
 	"github.com/jmoiron/sqlx"
+)
+
+const (
+	isQuerySearch = "(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)"
+	isFilterDataType = "dd.data_type = $%d"
+	isFilterCategoryType = "d.category = $%d"
+	isFilterStatusType = "dd.status = $%d"
+	isFilterCreateAt = "dd.created_at >= $%d"
+	isFilterEndAt = "dd.created_at <= $%d"
+	isQueryCreatedAt = "dd.created_at"
 )
 
 type DocumentRepository struct {
@@ -67,25 +76,25 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
@@ -101,12 +110,12 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -116,8 +125,8 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
 
-	allowedSort := map[string]bool{"dd.created_at": true, "dd.document_name": true, "dd.staff": true}
-	sortBy := "dd.created_at"
+	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true}
+	sortBy := isQueryCreatedAt
 	if filter.SortBy != "" {
 		
 		sb := filter.SortBy
@@ -163,25 +172,25 @@ func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, erro
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
@@ -197,12 +206,12 @@ func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, erro
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -307,25 +316,25 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
@@ -337,12 +346,12 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -352,8 +361,8 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
 
-	allowedSort := map[string]bool{"dd.created_at": true, "dd.document_name": true, "dd.staff": true}
-	sortBy := "dd.created_at"
+	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true}
+	sortBy := isQueryCreatedAt
 	if filter.SortBy != "" {
 		sb := filter.SortBy
 		if allowedSort[sb] {
@@ -398,25 +407,25 @@ func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)", argIndex, argIndex, argIndex))
+		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.data_type = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf("d.category = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.status = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
@@ -428,12 +437,12 @@ func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at >= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("dd.created_at <= $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
