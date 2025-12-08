@@ -1,0 +1,25 @@
+# Abaikan Git
+.git
+.gitignore
+
+# Abaikan file environment, JANGAN PERNAH masukkan .env ke image
+.env
+.env.*
+
+# Abaikan folder IDE dan OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Abaikan file log
+*.log
+
+# Abaikan folder uploads lokal
+uploads/
+
+# Abaikan hasil build lokal (jika ada)
+main
+main.exe
+bin/
+build/

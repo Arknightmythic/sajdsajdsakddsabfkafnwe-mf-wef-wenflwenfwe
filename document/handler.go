@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
+	"mime/multipart"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
@@ -172,6 +172,7 @@ func (h *DocumentHandler) getTeamNameForUser(ctx *gin.Context) string {
 }
 
 func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
+	// 1. Parse & Validate Form
 	form, err := ctx.MultipartForm()
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusBadRequest, "Failed to parse multipart form")
@@ -190,25 +191,50 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		return
 	}
 
+	// 2. Validate User & Auth
 	email, exists := ctx.Get("email")
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, emailNotFoundResponse)
 		return
 	}
-
-	
+	// Note: Preserving original logic/check from the source code
 	if !exists {
 		util.ErrorResponse(ctx, http.StatusUnauthorized, accountNotFoundResponse)
 		return
 	}
 	teamName := h.getTeamNameForUser(ctx)
 
+	// 3. Prepare Environment
 	uploadDir := config.GetUploadPath()
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to create upload directory")
 		return
 	}
 
+	maxFileSize, validTypes := h.getUploadConfig()
+
+	// 4. Process Files Loop
+	var uploadedDocuments []map[string]interface{}
+	var failedUploads []map[string]string
+
+	for _, file := range files {
+		success, failure := h.processSingleFile(ctx, file, category, email.(string), teamName, uploadDir, maxFileSize, validTypes)
+		if failure != nil {
+			failedUploads = append(failedUploads, failure)
+		} else {
+			uploadedDocuments = append(uploadedDocuments, success)
+		}
+	}
+
+	// 5. Send Response
+	h.sendUploadResponse(ctx, uploadedDocuments, failedUploads)
+}
+
+// ==================================================================================
+// HELPER FUNCTIONS (Tambahkan di bawah UploadDocument)
+// ==================================================================================
+
+func (h *DocumentHandler) getUploadConfig() (int, map[string]bool) {
 	validTypes := map[string]bool{"pdf": true, "txt": true}
 
 	maxFileSizeFromEnv, err := strconv.Atoi(os.Getenv("MAX_FILE_SIZE_ALLOWED"))
@@ -216,77 +242,74 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 		maxFileSizeFromEnv = 70
 	}
 	maxFileSize := maxFileSizeFromEnv * 1024 * 1024
+	return maxFileSize, validTypes
+}
 
-	var uploadedDocuments []map[string]interface{}
-	var failedUploads []map[string]string
+func (h *DocumentHandler) processSingleFile(ctx *gin.Context, file *multipart.FileHeader, category, email, teamName, uploadDir string, maxFileSize int, validTypes map[string]bool) (map[string]interface{}, map[string]string) {
+	originalFilename := file.Filename
 
-	for _, file := range files {
-		originalFilename := file.Filename
-
-		if file.Size > int64(maxFileSize) {
-			failedUploads = append(failedUploads, map[string]string{
-				"filename": originalFilename,
-				"reason":   fmt.Sprintf("File size exceeds maximum limit of %d MB", maxFileSize/(1024*1024)),
-			})
-			continue
+	// Check Size
+	if file.Size > int64(maxFileSize) {
+		return nil, map[string]string{
+			"filename": originalFilename,
+			"reason":   fmt.Sprintf("File size exceeds maximum limit of %d MB", maxFileSize/(1024*1024)),
 		}
-
-		ext := strings.ToLower(filepath.Ext(originalFilename))
-		dataType := strings.TrimPrefix(ext, ".")
-
-		if !validTypes[dataType] {
-			failedUploads = append(failedUploads, map[string]string{
-				"filename": originalFilename,
-				"reason":   "Invalid file type. Only PDF and TXT are allowed",
-			})
-			continue
-		}
-
-		uniqueFilename := GenerateUniqueFilename(originalFilename)
-		filePath := filepath.Join(uploadDir, uniqueFilename)
-
-		if err := ctx.SaveUploadedFile(file, filePath); err != nil {
-			failedUploads = append(failedUploads, map[string]string{
-				"filename": originalFilename,
-				"reason":   fmt.Sprintf("Failed to save file: %v", err),
-			})
-			continue
-		}
-
-		document := &Document{
-			Category: category,
-		}
-
-		isLatest := true
-		pendingStatus := "Pending"
-		detail := &DocumentDetail{
-			DocumentName: originalFilename,
-			Filename:     uniqueFilename,
-			DataType:     dataType,
-			Staff:        email.(string),
-			Team:         teamName,
-			Status:       &pendingStatus,
-			IsLatest:     &isLatest,
-			IsApprove:    nil,
-		}
-
-		if err := h.service.CreateDocument(document, detail); err != nil {
-			if removeErr := os.Remove(filePath); removeErr != nil {
-				log.Printf("Warning: Failed to remove file %s after DB error: %v", filePath, removeErr)
-			}
-			failedUploads = append(failedUploads, map[string]string{
-				"filename": originalFilename,
-				"reason":   fmt.Sprintf("Database error: %v", err),
-			})
-			continue
-		}
-
-		uploadedDocuments = append(uploadedDocuments, map[string]interface{}{
-			"document":        document,
-			"document_detail": detail,
-		})
 	}
 
+	// Check Type
+	ext := strings.ToLower(filepath.Ext(originalFilename))
+	dataType := strings.TrimPrefix(ext, ".")
+
+	if !validTypes[dataType] {
+		return nil, map[string]string{
+			"filename": originalFilename,
+			"reason":   "Invalid file type. Only PDF and TXT are allowed",
+		}
+	}
+
+	// Save File
+	uniqueFilename := GenerateUniqueFilename(originalFilename)
+	filePath := filepath.Join(uploadDir, uniqueFilename)
+
+	if err := ctx.SaveUploadedFile(file, filePath); err != nil {
+		return nil, map[string]string{
+			"filename": originalFilename,
+			"reason":   fmt.Sprintf("Failed to save file: %v", err),
+		}
+	}
+
+	// DB Operations
+	document := &Document{Category: category}
+	isLatest := true
+	pendingStatus := "Pending"
+	detail := &DocumentDetail{
+		DocumentName: originalFilename,
+		Filename:     uniqueFilename,
+		DataType:     dataType,
+		Staff:        email,
+		Team:         teamName,
+		Status:       &pendingStatus,
+		IsLatest:     &isLatest,
+		IsApprove:    nil,
+	}
+
+	if err := h.service.CreateDocument(document, detail); err != nil {
+		if removeErr := os.Remove(filePath); removeErr != nil {
+			log.Printf("Warning: Failed to remove file %s after DB error: %v", filePath, removeErr)
+		}
+		return nil, map[string]string{
+			"filename": originalFilename,
+			"reason":   fmt.Sprintf("Database error: %v", err),
+		}
+	}
+
+	return map[string]interface{}{
+		"document":        document,
+		"document_detail": detail,
+	}, nil
+}
+
+func (h *DocumentHandler) sendUploadResponse(ctx *gin.Context, uploadedDocuments []map[string]interface{}, failedUploads []map[string]string) {
 	response := gin.H{
 		"uploaded_count": len(uploadedDocuments),
 		"failed_count":   len(failedUploads),

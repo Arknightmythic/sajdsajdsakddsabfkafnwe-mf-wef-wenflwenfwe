@@ -72,7 +72,7 @@ tmp/
 docker-compose.override.yml
 docker-data/
 .docker/
-.dockerignore
+
 
 # =====================================
 # Misc

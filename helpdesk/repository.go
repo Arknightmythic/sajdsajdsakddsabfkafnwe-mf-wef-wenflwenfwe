@@ -2,10 +2,11 @@ package helpdesk
 
 import (
 	"database/sql"
-	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 type HelpdeskRepository struct {
@@ -54,7 +55,7 @@ func (r *HelpdeskRepository) UpdateSwitchStatus(status bool) (*SwitchHelpdesk, e
 		WHERE id = (SELECT id FROM switch_helpdesk LIMIT 1)
 		RETURNING id, status
 	`
-	
+
 	var sh SwitchHelpdesk
 	err = r.db.QueryRowx(query, status).StructScan(&sh)
 	if err != nil {
@@ -156,10 +157,17 @@ func (r *HelpdeskRepository) Update(helpdesk *Helpdesk) error {
 	return err
 }
 
-func (r *HelpdeskRepository) UpdateStatus(id int, status string) error {
-	query := `UPDATE helpdesk SET status = $1 WHERE id = $2`
-	_, err := r.db.Exec(query, status, id)
-	return err
+func (r *HelpdeskRepository) UpdateStatus(id int, status string, userID any) error {
+	var query string
+	if status == "in_progress" && userID != nil {
+		query += `UPDATE helpdesk SET status = $1, user_id = $2 WHERE id = $3`
+		_, err := r.db.Exec(query, status, userID, id)
+		return err
+	} else {
+		query = `UPDATE helpdesk SET status = $1 WHERE id = $2`
+		_, err := r.db.Exec(query, status, id)
+		return err
+	}
 }
 
 func (r *HelpdeskRepository) Delete(id int) error {

@@ -2,7 +2,7 @@ package team
 
 
 import (
-	"dokuprime-be/permission" // Import permission repo
+	"dokuprime-be/permission" 
 	"strconv"
 	"strings"
 )
@@ -42,60 +42,72 @@ func (s *TeamService) GetByID(id int) (*Team, error) {
 }
 
 func (s *TeamService) Update(team *Team) error {
-	// 1. Ambil data Team LAMA dari database sebelum di-update
+	
 	oldTeam, err := s.repo.GetByID(team.ID)
 	if err != nil {
 		return err
 	}
 
-	// 2. Deteksi Page apa saja yang DIHAPUS (Unselected)
-	// Buat map dari page baru untuk pengecekan cepat
+	
+	removedPages := s.getRemovedPages(oldTeam.Pages, team.Pages)
+
+	
+	if len(removedPages) > 0 {
+		if err := s.processPermissionRevocation(team.ID, removedPages); err != nil {
+			return err
+		}
+	}
+
+	
+	return s.repo.Update(team)
+}
+
+
+
+
+
+func (s *TeamService) getRemovedPages(oldPages, newPages []string) []string {
 	newPagesMap := make(map[string]bool)
-	for _, p := range team.Pages {
+	for _, p := range newPages {
 		newPagesMap[p] = true
 	}
 
 	var removedPages []string
-	for _, p := range oldTeam.Pages {
+	for _, p := range oldPages {
 		if !newPagesMap[p] {
 			removedPages = append(removedPages, p)
 		}
 	}
+	return removedPages
+}
 
-	// 3. Jika ada page yang dihapus, kita harus bersihkan permission di Role
-	if len(removedPages) > 0 {
-		// Ambil semua master permission untuk mencocokkan nama dengan ID
-		allPerms, err := s.repoPermission.GetAll()
-		if err != nil {
-			return err
-		}
+func (s *TeamService) processPermissionRevocation(teamID int, removedPages []string) error {
+	allPerms, err := s.repoPermission.GetAll()
+	if err != nil {
+		return err
+	}
 
-		var bannedPermIDs []string
-		
-		// Cari ID permission yang namanya diawali dengan page yang dihapus
-		// Contoh: Page "document-management" dihapus -> cari permission "document-management:..."
-		for _, perm := range allPerms {
-			for _, page := range removedPages {
-				// Gunakan ":" agar tidak salah match (misal "user" tidak menghapus "user-management")
-				prefix := page + ":" 
-				if strings.HasPrefix(perm.Name, prefix) {
-					bannedPermIDs = append(bannedPermIDs, strconv.Itoa(perm.ID))
-				}
-			}
-		}
+	bannedPermIDs := s.findBannedPermissionIDs(allPerms, removedPages)
 
-		// Eksekusi pembersihan Role jika ada ID yang harus dihapus
-		if len(bannedPermIDs) > 0 {
-			if err := s.repo.RevokeRolePermissions(team.ID, bannedPermIDs); err != nil {
-				return err
+	if len(bannedPermIDs) > 0 {
+		return s.repo.RevokeRolePermissions(teamID, bannedPermIDs)
+	}
+	return nil
+}
+
+func (s *TeamService) findBannedPermissionIDs(allPerms []permission.Permission, removedPages []string) []string {
+	var bannedPermIDs []string
+	for _, perm := range allPerms {
+		for _, page := range removedPages {
+			
+			prefix := page + ":"
+			if strings.HasPrefix(perm.Name, prefix) {
+				bannedPermIDs = append(bannedPermIDs, strconv.Itoa(perm.ID))
 			}
 		}
 	}
-
-	// 4. Update Team seperti biasa
-	return s.repo.Update(team)
+	return bannedPermIDs
 }
-
 func (s *TeamService) Delete(id int) error {
 	return s.repo.Delete(id)
 }
