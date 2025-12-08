@@ -1,4 +1,4 @@
-
+# Build stage
 FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git
@@ -12,27 +12,23 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
+# Final stage
 FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
-WORKDIR /app
+WORKDIR /root/
 
 COPY --from=builder /app/main .
 
+# Copy production env file as .env
 COPY .env.production .env
 
-RUN mkdir -p /tmp/file_upload \
-    && chown -R appuser:appgroup /tmp/file_upload \
-    && chmod 755 /tmp/file_upload \
-    && chown -R appuser:appgroup /app
+# Create upload directory with proper permissions
+RUN mkdir -p /tmp/file_upload && chmod 777 /tmp/file_upload
 
 EXPOSE 8000
 
 VOLUME ["/tmp/file_upload"]
-
-USER appuser
 
 CMD ["./main"]
