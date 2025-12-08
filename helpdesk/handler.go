@@ -10,9 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const(
-	isInvalidBody = "Invalid request body"
-	isInvalidHDId = "Invalid helpdesk ID"
+const (
+	isInvalidBody      = "Invalid request body"
+	isInvalidHDId      = "Invalid helpdesk ID"
+	isNotAuthenticated = "User not authenticated"
 )
 
 type HelpdeskHandler struct {
@@ -41,7 +42,7 @@ func (h *HelpdeskHandler) UpdateSwitchStatus(ctx *gin.Context) {
 	var req struct {
 		Status bool `json:"status"`
 	}
-	
+
 	// Gunakan ShouldBindJSON untuk mapping true/false dari JSON body
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
@@ -92,9 +93,15 @@ func (h *HelpdeskHandler) GetAll(ctx *gin.Context) {
 	search := ctx.DefaultQuery("search", "")
 	status := ctx.DefaultQuery("status", "") // Baca parameter status
 
-	if limit <= 0 { limit = 10 }
-	if limit > 100 { limit = 100 }
-	if offset < 0 { offset = 0 }
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	// Panggil service dengan status
 	helpdesks, total, err := h.service.GetAll(limit, offset, search, status)
@@ -138,6 +145,12 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 		return
 	}
 
+	userID, exists := ctx.Get("user_id")
+	if !exists {
+		util.ErrorResponse(ctx, http.StatusUnauthorized, isNotAuthenticated)
+		return
+	}
+
 	var req map[string]interface{}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
@@ -151,7 +164,7 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 			return
 		}
 
-		if err := h.service.UpdateStatus(id, status); err != nil {
+		if err := h.service.UpdateStatus(id, status, userID); err != nil {
 			util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 			return
 		}

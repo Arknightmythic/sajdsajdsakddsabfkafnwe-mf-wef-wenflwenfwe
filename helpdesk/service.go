@@ -44,8 +44,8 @@ func (s *HelpdeskService) Update(helpdesk *Helpdesk) error {
 	return s.repo.Update(helpdesk)
 }
 
-func (s *HelpdeskService) UpdateStatus(id int, status string) error {
-	return s.repo.UpdateStatus(id, status)
+func (s *HelpdeskService) UpdateStatus(id int, status string, userID any) error {
+	return s.repo.UpdateStatus(id, status, userID)
 }
 
 func (s *HelpdeskService) Delete(id int) error {
