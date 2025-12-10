@@ -510,7 +510,7 @@ func (r *ChatRepository) createPairFromHistory(q, a chatHistoryWithPlatform) (Ch
 			Revision:         a.Revision,
 			SessionID:        q.SessionID,
 			IsValidated:      a.IsValidated,
-			IsAnswered:       a.IsAnswered,
+			IsAnswered:       q.IsAnswered,
 			CreatedAt:        q.CreatedAt,
 			PlatformUniqueID: q.PlatformUniqueID,
 		}, true

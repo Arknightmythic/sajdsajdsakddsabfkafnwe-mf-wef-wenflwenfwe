@@ -699,6 +699,11 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 	if val := ctx.Query("is_answered"); val != "" {
 		boolVal := val == "true" || val == "1"
 		isAnsweredFilter = &boolVal
+	} else {
+		// TAMBAHAN: Set default ke FALSE jika tidak ada parameter di URL
+		// Ini memaksa tampilkan yang belum terjawab saja secara default
+		defaultFalse := false
+		isAnsweredFilter = &defaultFalse
 	}
 
 	filter := ChatHistoryFilter{
