@@ -51,7 +51,7 @@ func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error 
 }
 
 func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentWithDetail, error) {
-	// 1. Build Filter Conditions
+	
 	conditions, args, argIndex := r.buildDocumentFilters(filter)
 
 	base := `
@@ -78,15 +78,15 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
 
-	// 2. Add Sorting
+	
 	query += r.buildSortClause(filter)
 
-	// 3. Add Pagination
+	
 	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, limit, offset)
 
-	// 4. Execute Query
+	
 	var documents []DocumentWithDetail
 	err := r.db.Select(&documents, query, args...)
 	if err != nil {
@@ -319,7 +319,7 @@ func (r *DocumentRepository) UpdateDocumentDetailStatus(id int, status string) e
 }
 
 func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) ([]DocumentDetail, error) {
-	// 1. Build Filter Conditions
+	
 	conditions, args, argIndex := r.buildDocumentDetailFilters(filter)
 
 	base := `
@@ -338,15 +338,15 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
 
-	// 2. Add Sorting
+	
 	query += r.buildDetailSortClause(filter)
 
-	// 3. Add Pagination (Menggunakan helper ensurePagination yang sudah ada dari langkah sebelumnya)
+	
 	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, limit, offset)
 
-	// 4. Execute Query
+	
 	var details []DocumentDetail
 	err := r.db.Select(&details, query, args...)
 	if err != nil {
@@ -355,10 +355,10 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	return details, nil
 }
 
-// ==================================================================================
-// TAMBAHAN HELPER FUNCTIONS KHUSUS DOCUMENT DETAILS
-// (Tambahkan di bawah, jangan hapus helper yang sudah ada sebelumnya)
-// ==================================================================================
+
+
+
+
 
 func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFilter) ([]string, []interface{}, int) {
 	var conditions []string
@@ -542,4 +542,31 @@ func (r *DocumentRepository) GetApprovedLatestDocumentDetailByDocumentID(documen
 		return nil, err
 	}
 	return &detail, nil
+}
+
+
+
+
+func (r *DocumentRepository) GetLatestDetailByDocumentName(docName string) (*DocumentDetail, error) {
+	var detail DocumentDetail
+	
+	query := `
+		SELECT 
+			id, document_id, document_name, filename, data_type, staff, team, 
+			status, is_latest, is_approve, created_at, ingest_status
+		FROM document_details
+		WHERE document_name = $1 AND is_latest = true
+		LIMIT 1
+	`
+	err := r.db.Get(&detail, query, docName)
+	if err != nil {
+		return nil, err
+	}
+	return &detail, nil
+}
+
+
+func (r *DocumentRepository) DeleteDocumentDetailHard(id int) error {
+	_, err := r.db.Exec(`DELETE FROM document_details WHERE id = $1`, id)
+	return err
 }

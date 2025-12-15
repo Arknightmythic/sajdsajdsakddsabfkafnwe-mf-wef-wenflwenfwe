@@ -36,6 +36,13 @@ type FileData struct {
 	Content  []byte
 }
 
+
+type CrawlerUploadResult struct {
+	Filename string `json:"filename"`
+	Status   string `json:"status"` 
+	Reason   string `json:"reason,omitempty"`
+}
+
 func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client, asyncProcessor *AsyncProcessor, externalClient *external.Client) *DocumentService {
 	return &DocumentService{
 		repo:           repo,
@@ -321,13 +328,13 @@ type batchStats struct {
 }
 
 func (s *DocumentService) processBatchUpload(batchID string, files []FileData, category, email, accountType string, autoApprove bool) {
-	// 1. Prepare Environment
+	
 	uploadDir, maxFileSize, validTypes, err := s.prepareBatchEnv(batchID)
 	if err != nil {
 		return
 	}
 
-	// 2. Initialize Stats
+	
 	stats := &batchStats{
 		total:       len(files),
 		batchID:     batchID,
@@ -338,26 +345,26 @@ func (s *DocumentService) processBatchUpload(batchID string, files []FileData, c
 	jobs := make(chan FileData, len(files))
 	var wg sync.WaitGroup
 
-	// 3. Start Workers
+	
 	for w := 0; w < workerCount; w++ {
 		wg.Add(1)
 		go s.runBatchWorker(w, jobs, &wg, stats, category, email, accountType, uploadDir, validTypes, maxFileSize)
 	}
 
-	// 4. Distribute Jobs
+	
 	for _, file := range files {
 		jobs <- file
 	}
 	close(jobs)
 
-	// 5. Wait and Finalize
+	
 	wg.Wait()
 	s.finalizeBatch(stats)
 }
 
-// ==================================================================================
-// HELPER FUNCTIONS (Tambahkan di bawah processBatchUpload)
-// ==================================================================================
+
+
+
 
 func (s *DocumentService) prepareBatchEnv(batchID string) (string, int, map[string]bool, error) {
 	uploadDir := config.GetUploadPath()
@@ -592,12 +599,126 @@ func (s *DocumentService) BatchDeleteDocuments(ids []int) (int, []string) {
 
 
 func (s *DocumentService) GenerateViewTokenByDocumentID(documentID int) (string, error) {
-	// Cari detail dokumen yang latest & approved berdasarkan document_id
+	
 	detail, err := s.repo.GetApprovedLatestDocumentDetailByDocumentID(documentID)
 	if err != nil {
 		return "", fmt.Errorf("approved and latest document detail not found for document_id %d: %w", documentID, err)
 	}
 
-	// Generate token menggunakan filename yang ditemukan (reuse fungsi yang ada)
+	
 	return s.GenerateViewToken(detail.Filename)
+}
+
+
+func (s *DocumentService) ProcessCrawlerBatch(files []*multipart.FileHeader, category string) ([]CrawlerUploadResult, error) {
+	uploadDir := config.GetUploadPath()
+	var results []CrawlerUploadResult
+
+	for _, fileHeader := range files {
+		res := s.processSingleCrawlerFile(fileHeader, category, uploadDir)
+		results = append(results, res)
+	}
+
+	return results, nil
+}
+
+func (s *DocumentService) processSingleCrawlerFile(fileHeader *multipart.FileHeader, category, uploadDir string) CrawlerUploadResult {
+	originalName := fileHeader.Filename
+	
+	existing, err := s.repo.GetLatestDetailByDocumentName(originalName)
+	isExist := err == nil && existing != nil
+
+	if isExist {
+		
+		
+		if existing.Status != nil && *existing.Status == "Approved" &&
+			existing.IsApprove != nil && *existing.IsApprove && 
+			existing.IngestStatus != nil {
+			
+			return CrawlerUploadResult{
+				Filename: originalName,
+				Status:   "Skipped",
+				Reason:   "Document already exists and is Approved/Ingested",
+			}
+		}
+
+		
+		
+		isPending := existing.Status != nil && *existing.Status == "Pending" && existing.IsApprove == nil
+		isRejected := existing.Status != nil && *existing.Status == "Rejected"
+
+		if isPending || isRejected {
+			
+			oldFilePath := filepath.Join(uploadDir, existing.Filename)
+			
+			_ = os.Remove(oldFilePath)
+
+			
+			
+			if err := s.DeleteDocument(existing.DocumentID); err != nil {
+				return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to delete old rejected/pending document"}
+			}
+			
+			
+		} else {
+			
+			return CrawlerUploadResult{
+				Filename: originalName,
+				Status:   "Skipped",
+				Reason:   "Document exists with unhandled status: " + *existing.Status,
+			}
+		}
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to open file"}
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to read content"}
+	}
+
+	uniqueFilename := GenerateUniqueFilename(originalName)
+	filePath := filepath.Join(uploadDir, uniqueFilename)
+
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to save to disk"}
+	}
+
+	
+	doc := &Document{Category: category}
+	isLatest := true
+	status := "Pending" 
+	
+	detail := &DocumentDetail{
+		DocumentName: originalName,
+		Filename:     uniqueFilename,
+		DataType:     strings.TrimPrefix(strings.ToLower(filepath.Ext(originalName)), "."),
+		Staff:        "Crawler Bot",
+		Team:         "System",
+		Status:       &status,
+		IsLatest:     &isLatest,
+		IsApprove:    nil,
+		IngestStatus: nil,
+	}
+
+	if err := s.CreateDocument(doc, detail); err != nil {
+		os.Remove(filePath)
+		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Database insert failed"}
+	}
+
+	
+	finalStatus := "Uploaded"
+	if isExist {
+		
+		finalStatus = "Replaced" 
+	}
+
+	return CrawlerUploadResult{
+		Filename: originalName,
+		Status:   finalStatus,
+	}
 }

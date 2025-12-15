@@ -790,3 +790,63 @@ func (h *DocumentHandler) GenerateViewURLByDocumentID(ctx *gin.Context) {
 		"url": viewURL,
 	})
 }
+
+// Tambahkan di document/handler.go
+
+func (h *DocumentHandler) CrawlerBatchUpload(c *gin.Context) {
+	// 1. Ambil Form Data
+	form, err := c.MultipartForm()
+	if err != nil {
+		util.ErrorResponse(c, http.StatusBadRequest, "Failed to parse multipart form")
+		return
+	}
+
+	files := form.File["files"]
+	if len(files) == 0 {
+		util.ErrorResponse(c, http.StatusBadRequest, "No files uploaded")
+		return
+	}
+
+	// Default category jika tidak dikirim crawler
+	category := c.DefaultPostForm("category", "crawling-data")
+
+	// 2. Panggil Service
+	// Kita tidak perlu User Email/Team karena ini Machine-to-Machine
+	results, err := h.service.ProcessCrawlerBatch(files, category)
+	if err != nil {
+		util.ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// 3. Hitung ringkasan
+	successCount := 0
+	replacedCount := 0
+	skippedCount := 0
+	errorCount := 0
+
+	for _, r := range results {
+		switch r.Status {
+		case "Uploaded":
+			successCount++
+		case "Replaced":
+			replacedCount++
+		case "Skipped":
+			skippedCount++
+		case "Error":
+			errorCount++
+		}
+	}
+
+	// 4. Response
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": fmt.Sprintf("Processed %d files", len(files)),
+		"summary": gin.H{
+			"uploaded": successCount,
+			"replaced": replacedCount,
+			"skipped":  skippedCount,
+			"errors":   errorCount,
+		},
+		"details": results,
+	})
+}

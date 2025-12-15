@@ -45,6 +45,12 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 		documentRoutes.GET("/queue-status", handler.GetQueueStatus)
 	}
 
+	crawlerRoutes := r.Group("/api/documents/crawler")
+	crawlerRoutes.Use(middleware.APIKeyMiddleware()) 
+	{
+		crawlerRoutes.POST("/upload", handler.CrawlerBatchUpload)
+	}
+
 	return asyncProcessor
 }
 

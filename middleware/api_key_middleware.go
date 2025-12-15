@@ -3,9 +3,7 @@ package middleware
 import (
 	"net/http"
 	"os"
-
 	"dokuprime-be/util"
-
 	"github.com/gin-gonic/gin"
 )
 
