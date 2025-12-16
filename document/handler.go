@@ -298,9 +298,9 @@ func (h *DocumentHandler) processSingleFile(ctx *gin.Context, file *multipart.Fi
 			log.Printf("Warning: Failed to remove file %s after DB error: %v", filePath, removeErr)
 		}
 		return nil, map[string]string{
-			"filename": originalFilename,
-			"reason":   fmt.Sprintf("Database error: %v", err),
-		}
+            "filename": originalFilename,
+            "reason":   err.Error(), 
+        }
 	}
 
 	return map[string]interface{}{
@@ -310,34 +310,44 @@ func (h *DocumentHandler) processSingleFile(ctx *gin.Context, file *multipart.Fi
 }
 
 func (h *DocumentHandler) sendUploadResponse(ctx *gin.Context, uploadedDocuments []map[string]interface{}, failedUploads []map[string]string) {
-	response := gin.H{
-		"uploaded_count": len(uploadedDocuments),
-		"failed_count":   len(failedUploads),
-		"uploaded":       uploadedDocuments,
-	}
+    response := gin.H{
+        "uploaded_count": len(uploadedDocuments),
+        "failed_count":   len(failedUploads),
+        "uploaded":       uploadedDocuments,
+    }
 
-	if len(failedUploads) > 0 {
-		response["failed"] = failedUploads
-	}
+    if len(failedUploads) > 0 {
+        response["failed"] = failedUploads
+    }
 
-	if len(uploadedDocuments) == 0 {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "No files were uploaded successfully")
-		return
-	}
+    // 1. Cek GAGAL TOTAL dulu
+    if len(uploadedDocuments) == 0 {
+        statusCode := http.StatusBadRequest
+        message := "No files were uploaded successfully"
 
-	statusCode := http.StatusCreated
-	message := "Documents uploaded successfully"
+        // Ambil pesan spesifik dari error pertama jika ada
+        if len(failedUploads) > 0 {        
+            message = failedUploads[0]["reason"]
+        }
 
-	if len(failedUploads) > 0 {
-		statusCode = http.StatusMultiStatus
-		message = "Some documents uploaded successfully, some failed"
-	}
+        util.ErrorResponse(ctx, statusCode, message)
+        return
+    }
 
-	ctx.JSON(statusCode, gin.H{
-		"success": true,
-		"message": message,
-		"data":    response,
-	})
+    // 2. Jika ada yang berhasil (Partial atau Full Success)
+    statusCode := http.StatusCreated
+    message := "Documents uploaded successfully"
+
+    if len(failedUploads) > 0 {
+        statusCode = http.StatusMultiStatus
+        message = "Some documents uploaded successfully, some failed"
+    }
+
+    ctx.JSON(statusCode, gin.H{
+        "success": true,
+        "message": message,
+        "data":    response,
+    })
 }
 
 func (h *DocumentHandler) GetDocuments(ctx *gin.Context) {

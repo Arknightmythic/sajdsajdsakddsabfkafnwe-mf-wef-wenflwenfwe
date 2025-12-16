@@ -75,6 +75,12 @@ func (s *DocumentService) GenerateViewTokenByID(id int) (string, error) {
 }
 
 func (s *DocumentService) CreateDocument(document *Document, detail *DocumentDetail) error {
+	existing, err := s.repo.CheckDuplicationFileByDocumentName(detail.DocumentName)
+	
+	if err == nil && existing != nil {
+		return fmt.Errorf("menolak upload karena file dengan document yang sama namanya sudah ada")
+	}
+
 	if err := s.repo.CreateDocument(document); err != nil {
 		return err
 	}

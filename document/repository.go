@@ -545,8 +545,6 @@ func (r *DocumentRepository) GetApprovedLatestDocumentDetailByDocumentID(documen
 }
 
 
-
-
 func (r *DocumentRepository) GetLatestDetailByDocumentName(docName string) (*DocumentDetail, error) {
 	var detail DocumentDetail
 	
@@ -569,4 +567,20 @@ func (r *DocumentRepository) GetLatestDetailByDocumentName(docName string) (*Doc
 func (r *DocumentRepository) DeleteDocumentDetailHard(id int) error {
 	_, err := r.db.Exec(`DELETE FROM document_details WHERE id = $1`, id)
 	return err
+}
+
+func (r *DocumentRepository) CheckDuplicationFileByDocumentName(docName string) (*DocumentDetail, error) {
+	var detail DocumentDetail
+	
+	query := `
+		SELECT id, document_name 
+		FROM document_details
+		WHERE document_name = $1 AND is_latest = true
+		LIMIT 1
+	`
+	err := r.db.Get(&detail, query, docName)
+	if err != nil {
+		return nil, err
+	}
+	return &detail, nil
 }
