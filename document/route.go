@@ -43,6 +43,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 		documentRoutes.GET("/download/:filename", handler.DownloadDocument)
 		documentRoutes.GET("/all-details", handler.GetAllDocumentDetails)
 		documentRoutes.GET("/queue-status", handler.GetQueueStatus)
+		documentRoutes.POST("/check-duplicates", handler.CheckDuplicates)
 	}
 
 	crawlerRoutes := r.Group("/api/documents/crawler")

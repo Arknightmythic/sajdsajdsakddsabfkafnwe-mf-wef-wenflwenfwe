@@ -728,3 +728,7 @@ func (s *DocumentService) processSingleCrawlerFile(fileHeader *multipart.FileHea
 		Status:   finalStatus,
 	}
 }
+
+func (s *DocumentService) CheckDuplicates(filenames []string) ([]string, error) {
+	return s.repo.CheckExistingDocuments(filenames)
+}

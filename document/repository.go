@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 const (
@@ -583,4 +584,21 @@ func (r *DocumentRepository) CheckDuplicationFileByDocumentName(docName string) 
 		return nil, err
 	}
 	return &detail, nil
+}
+
+func (r *DocumentRepository) CheckExistingDocuments(names []string) ([]string, error) {
+	duplicates := make([]string, 0) 
+	
+	query := `
+		SELECT document_name 
+		FROM document_details 
+		WHERE document_name = ANY($1) AND is_latest = true
+	`
+	
+	err := r.db.Select(&duplicates, query, pq.Array(names))
+	if err != nil {
+		return nil, err
+	}
+	
+	return duplicates, nil
 }

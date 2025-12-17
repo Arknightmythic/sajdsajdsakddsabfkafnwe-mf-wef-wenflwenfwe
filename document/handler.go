@@ -860,3 +860,28 @@ func (h *DocumentHandler) CrawlerBatchUpload(c *gin.Context) {
 		"details": results,
 	})
 }
+
+
+// Tambahkan di document/handler.go
+
+func (h *DocumentHandler) CheckDuplicates(ctx *gin.Context) {
+	var req struct {
+		Filenames []string `json:"filenames" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	duplicates, err := h.service.CheckDuplicates(req.Filenames)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Kembalikan list file yang duplikat (bisa kosong arraynya jika aman semua)
+	util.SuccessResponse(ctx, "Scan completed", gin.H{
+		"duplicates": duplicates,
+	})
+}
