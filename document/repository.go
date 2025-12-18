@@ -31,12 +31,20 @@ func (r *DocumentRepository) CreateDocument(document *Document) error {
 }
 
 func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error {
+	
 	query := `
 		INSERT INTO document_details 
-		(document_id, document_name, filename, data_type, staff, team, status, is_latest, is_approve, created_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) 
-		RETURNING id, created_at
+		(document_id, document_name, filename, data_type, staff, team, status, is_latest, is_approve, created_at, ingest_status, request_type, requested_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, NOW()) 
+		RETURNING id, created_at, requested_at
 	`
+	
+	
+	reqType := "NEW"
+	if detail.RequestType != nil {
+		reqType = *detail.RequestType
+	}
+
 	return r.db.QueryRow(
 		query,
 		detail.DocumentID,
@@ -48,11 +56,12 @@ func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error 
 		detail.Status,
 		detail.IsLatest,
 		detail.IsApprove,
-	).Scan(&detail.ID, &detail.CreatedAt)
+		detail.IngestStatus,
+		reqType, 
+	).Scan(&detail.ID, &detail.CreatedAt, &detail.RequestedAt)
 }
 
 func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentWithDetail, error) {
-	
 	conditions, args, argIndex := r.buildDocumentFilters(filter)
 
 	base := `
@@ -68,25 +77,21 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 			dd.is_latest AS is_latest,
 			dd.is_approve AS is_approve,
 			dd.created_at AS created_at,
-			dd.ingest_status AS ingest_status
+			dd.ingest_status AS ingest_status,
+			dd.request_type AS request_type,
+			dd.requested_at AS requested_at
 		FROM documents d
 		INNER JOIN document_details dd ON d.id = dd.document_id
 		WHERE dd.is_latest = true
 	`
-
-	query := base
+query := base
 	if len(conditions) > 0 {
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
-
-	
 	query += r.buildSortClause(filter)
-
-	
 	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, limit, offset)
-
 	
 	var documents []DocumentWithDetail
 	err := r.db.Select(&documents, query, args...)
@@ -290,7 +295,8 @@ func (r *DocumentRepository) GetDocumentDetailByID(id int) (*DocumentDetail, err
 	query := `
 		SELECT 
 			id, document_id, document_name, filename, data_type, staff, team, 
-			status, is_latest, is_approve, created_at, ingest_status
+			status, is_latest, is_approve, created_at, ingest_status,
+			request_type, requested_at  -- NEW
 		FROM document_details
 		WHERE id = $1
 	`
@@ -320,7 +326,6 @@ func (r *DocumentRepository) UpdateDocumentDetailStatus(id int, status string) e
 }
 
 func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) ([]DocumentDetail, error) {
-	
 	conditions, args, argIndex := r.buildDocumentDetailFilters(filter)
 
 	base := `
@@ -328,7 +333,9 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 			dd.id, dd.document_id, dd.document_name, dd.filename, dd.data_type, 
 			dd.staff, dd.team, dd.status, dd.is_latest, dd.is_approve, dd.created_at,
 			d.category,
-			dd.ingest_status
+			dd.ingest_status,
+			dd.request_type,
+			dd.requested_at
 		FROM document_details dd
 		INNER JOIN documents d ON dd.document_id = d.id
 		WHERE 1=1
@@ -338,16 +345,11 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	if len(conditions) > 0 {
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
-
-	
 	query += r.buildDetailSortClause(filter)
-
-	
 	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, limit, offset)
 
-	
 	var details []DocumentDetail
 	err := r.db.Select(&details, query, args...)
 	if err != nil {
@@ -355,7 +357,6 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	}
 	return details, nil
 }
-
 
 
 
@@ -601,4 +602,50 @@ func (r *DocumentRepository) CheckExistingDocuments(names []string) ([]string, e
 	}
 	
 	return duplicates, nil
+}
+func (r *DocumentRepository) RequestDelete(id int) error {
+	query := `
+		UPDATE document_details
+		SET 
+			status = 'Pending',
+			request_type = 'DELETE',
+			requested_at = NOW()
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(query, id)
+	return err
+}
+
+
+func (r *DocumentRepository) BatchRequestDelete(ids []int) error {
+	query := `
+		UPDATE document_details
+		SET 
+			status = 'Pending',
+			request_type = 'DELETE',
+			requested_at = NOW()
+		WHERE id = ANY($1)
+	`
+	_, err := r.db.Exec(query, pq.Array(ids))
+	return err
+}
+
+
+func (r *DocumentRepository) RestoreStatus(id int) error {
+	query := `
+		UPDATE document_details
+		SET 
+			status = 'Approved',
+			request_type = NULL,
+			requested_at = NULL
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(query, id)
+	return err
+}
+
+func (r *DocumentRepository) UpdateStatus(id int, status string) error {
+    query := `UPDATE document_details SET status = $1 WHERE id = $2`
+    _, err := r.db.Exec(query, status, id)
+    return err
 }

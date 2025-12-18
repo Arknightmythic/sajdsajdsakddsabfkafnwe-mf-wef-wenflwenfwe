@@ -75,20 +75,38 @@ func (s *DocumentService) GenerateViewTokenByID(id int) (string, error) {
 }
 
 func (s *DocumentService) CreateDocument(document *Document, detail *DocumentDetail) error {
-	existing, err := s.repo.CheckDuplicationFileByDocumentName(detail.DocumentName)
-	
-	if err == nil && existing != nil {
-		return fmt.Errorf("menolak upload karena file dengan document yang sama namanya sudah ada")
-	}
+    existing, err := s.repo.CheckDuplicationFileByDocumentName(detail.DocumentName)
+    if err == nil && existing != nil {
+        return fmt.Errorf("menolak upload karena file dengan document yang sama namanya sudah ada")
+    }
+    if err := s.repo.CreateDocument(document); err != nil {
+        return err
+    }
 
-	if err := s.repo.CreateDocument(document); err != nil {
+    // Explicit set NEW for new uploads
+    newReq := "NEW"
+    detail.RequestType = &newReq
+    detail.DocumentID = document.ID
+    
+    return s.repo.CreateDocumentDetail(detail)
+}
+
+func (s *DocumentService) UpdateDocument(documentID int, detail *DocumentDetail) error {
+	_, err := s.repo.GetDocumentByID(documentID)
+	if err != nil {
 		return err
 	}
 
-	detail.DocumentID = document.ID
+	falseValue := false
+	detail.IsLatest = &falseValue
+	detail.DocumentID = documentID
+
+    // --- PERBAIKAN: Set Tipe Request UPDATE ---
+    reqType := "UPDATE"
+    detail.RequestType = &reqType 
+
 	return s.repo.CreateDocumentDetail(detail)
 }
-
 func (s *DocumentService) GetAllDocuments(filter DocumentFilter) ([]DocumentWithDetail, int, error) {
 	documents, err := s.repo.GetAllDocuments(filter)
 	if err != nil {
@@ -107,24 +125,17 @@ func (s *DocumentService) GetDocumentDetailsByDocumentID(documentID int) ([]Docu
 	return s.repo.GetDocumentDetailsByDocumentID(documentID)
 }
 
-func (s *DocumentService) UpdateDocument(documentID int, detail *DocumentDetail) error {
-	_, err := s.repo.GetDocumentByID(documentID)
-	if err != nil {
-		return err
-	}
-
-	falseValue := false
-	detail.IsLatest = &falseValue
-
-	detail.DocumentID = documentID
-	return s.repo.CreateDocumentDetail(detail)
-}
-
 func (s *DocumentService) ApproveDocument(detailID int) error {
 	detail, err := s.repo.GetDocumentDetailByID(detailID)
 	if err != nil {
 		return fmt.Errorf("failed to get document detail: %w", err)
 	}
+
+    // --- LOGIKA BARU: HANDLE DELETE REQUEST ---
+    if detail.RequestType != nil && *detail.RequestType == "DELETE" {
+        // Jika requestnya DELETE, panggil fungsi hard delete
+        return s.ExecuteHardDelete(detail.DocumentID) // Kita rename fungsi delete lama jadi ExecuteHardDelete agar jelas
+    }
 
 	if detail.Status != nil && *detail.Status == "Approved" {
 		return fmt.Errorf("document is already approved")
@@ -192,22 +203,64 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 }
 
 func (s *DocumentService) RejectDocument(detailID int) error {
+    detail, err := s.repo.GetDocumentDetailByID(detailID)
+    if err != nil {
+        return err
+    }
+
+    // --- BARU: Jika menolak DELETE, kembalikan jadi Approved ---
+    if detail.RequestType != nil && *detail.RequestType == "DELETE" {
+        return s.repo.RestoreStatus(detailID)
+    }
+
+    // --- BARU: Jika menolak UPDATE/NEW ---
 	if err := s.repo.UpdateDocumentDetailApprove(detailID, false); err != nil {
 		return fmt.Errorf("failed to set is_approve to false: %w", err)
 	}
-
 	if err := s.repo.UpdateDocumentDetailStatus(detailID, "Rejected"); err != nil {
 		return fmt.Errorf("failed to set status to Rejected: %w", err)
 	}
-
 	if err := s.repo.UpdateDocumentDetailIngestStatus(detailID, "unprocessed"); err != nil {
 		return fmt.Errorf("failed to set ingest_status to unprocessed: %w", err)
 	}
 
 	return nil
 }
+func (s *DocumentService) RequestDelete(documentID int) error {
+    // Cari detail yang latest
+    detail, err := s.repo.GetApprovedLatestDocumentDetailByDocumentID(documentID)
+    if err != nil {
+        // Fallback jika tidak ada approved (misal pending), ambil latest by name/id
+        // Atau return error
+        return fmt.Errorf("cannot delete: active document detail not found")
+    }
 
-func (s *DocumentService) DeleteDocument(documentID int) error {
+    if detail.IngestStatus != nil && *detail.IngestStatus == "processing" {
+        return fmt.Errorf("cannot delete document while it is being processed")
+    }
+
+    return s.repo.RequestDelete(detail.ID)
+}
+
+// 6. NEW: BatchRequestDelete
+func (s *DocumentService) BatchRequestDelete(ids []int) (int, []string) {
+    successCount := 0
+    var errorMessages []string
+
+    for _, id := range ids {
+        // Note: ID yang dikirim frontend biasanya document_id (parent), bukan detail_id.
+        // Kita perlu cari detailnya dulu.
+        err := s.RequestDelete(id)
+        if err != nil {
+            errorMessages = append(errorMessages, fmt.Sprintf("ID %d: %v", id, err))
+        } else {
+            successCount++
+        }
+    }
+    return successCount, errorMessages
+}
+
+func (s *DocumentService) ExecuteHardDelete(documentID int) error {
 
 	document, err := s.repo.GetDocumentByID(documentID)
 	if err != nil {
@@ -247,6 +300,10 @@ func (s *DocumentService) DeleteDocument(documentID int) error {
 	}
 
 	return nil
+}
+
+func (s *DocumentService) DeleteDocument(documentID int) error {
+    return s.RequestDelete(documentID)
 }
 
 func GenerateUniqueFilename(originalFilename string) string {

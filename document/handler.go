@@ -549,7 +549,7 @@ func (h *DocumentHandler) DeleteDocument(ctx *gin.Context) {
 		return
 	}
 
-	util.SuccessResponse(ctx, "Document and all related details deleted successfully", nil)
+	util.SuccessResponse(ctx, "Request hapus berhasil dikirim. Menunggu persetujuan Admin.", nil)
 }
 
 func (h *DocumentHandler) DownloadDocument(ctx *gin.Context) {
@@ -753,22 +753,24 @@ func (h *DocumentHandler) BatchDeleteDocument(c *gin.Context) {
 		return
 	}
 
-	successCount, errors := h.service.BatchDeleteDocuments(req.IDs)
+    // GANTI: Panggil BatchRequestDelete
+	successCount, errors := h.service.BatchRequestDelete(req.IDs)
 
 	if len(errors) > 0 && successCount == 0 {
-		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to delete all selected documents")
+		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to request delete for all selected documents")
 		return
 	}
-
-	responseMsg := fmt.Sprintf("Successfully deleted %d documents", successCount)
+    
+    // Update pesan response
+	responseMsg := fmt.Sprintf("Successfully requested delete for %d documents", successCount)
 	if len(errors) > 0 {
-		responseMsg = fmt.Sprintf("Deleted %d documents with %d failures", successCount, len(errors))
+		responseMsg = fmt.Sprintf("Requested %d documents with %d failures", successCount, len(errors))
 	}
 
 	util.SuccessResponse(c, responseMsg, gin.H{
 		"success_count": successCount,
 		"failed_count":  len(errors),
-		"errors":        errors, // Opsional: kirim detail error jika perlu
+		"errors":        errors,
 	})
 }
 

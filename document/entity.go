@@ -21,6 +21,8 @@ type DocumentDetail struct {
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 	Category     string    `db:"category" json:"category"`
 	IngestStatus *string   `db:"ingest_status" json:"ingest_status"`
+	RequestType  *string    `db:"request_type" json:"request_type"` // NEW, UPDATE, DELETE
+	RequestedAt  *time.Time `db:"requested_at" json:"requested_at"`
 }
 
 type DocumentWithDetail struct {
@@ -36,6 +38,8 @@ type DocumentWithDetail struct {
 	IsApprove    *bool     `db:"is_approve" json:"is_approve"`
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 	IngestStatus *string   `db:"ingest_status" json:"ingest_status"`
+	RequestType  *string    `db:"request_type" json:"request_type"`
+	RequestedAt  *time.Time `db:"requested_at" json:"requested_at"`
 }
 
 type DocumentFilter struct {
