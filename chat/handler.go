@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	invalidRequestBody   = "Invalid request body"
-	invalidDateFormat    = "Invalid date format: %v"
-	invalidChatHistoryID = "Invalid chat history ID"
-	invalidSessionID     = "Invalid session ID"
+	invalidRequestBody    = "Invalid request body"
+	invalidDateFormat     = "Invalid date format: %v"
+	invalidChatHistoryID  = "Invalid chat history ID"
+	invalidSessionID      = "Invalid session ID"
 	invalidConversationID = "Invalid conversation ID"
+	isNotAuthenticated    = "User not authenticated"
 )
 
 type ChatHandler struct {
@@ -153,7 +154,7 @@ func (h *ChatHandler) GetChatHistoryByID(ctx *gin.Context) {
 func (h *ChatHandler) GetChatHistoryBySessionID(ctx *gin.Context) {
 	sessionID, err := uuid.Parse(ctx.Param("session_id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID )
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID)
 		return
 	}
 
@@ -392,7 +393,6 @@ func (h *ChatHandler) DeleteConversation(ctx *gin.Context) {
 	util.SuccessResponse(ctx, "Conversation deleted successfully", nil)
 }
 
-
 func (h *ChatHandler) Ask(ctx *gin.Context) {
 	var req struct {
 		PlatformUniqueID string `json:"platform_unique_id" binding:"required"`
@@ -410,20 +410,17 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 	h.ensureWebSocketConnection()
 
-	
 	conversation, err := h.resolveAskConversation(ctx, req.ConversationID)
 	if err != nil {
-		return 
+		return
 	}
 
-	
 	if conversation != nil && conversation.IsHelpdesk {
 		if handled := h.handleExistingHelpdesk(ctx, conversation, req.Query, req.StartTimestamp); handled {
 			return
 		}
 	}
 
-	
 	chatReq := external.ChatRequest{
 		PlatformUniqueID: req.PlatformUniqueID,
 		Query:            req.Query,
@@ -439,7 +436,6 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		return
 	}
 
-	
 	finalConversation, err := h.ensureConversationFromResponse(req.Platform, req.PlatformUniqueID, resp)
 	if err != nil {
 		log.Println("Line 331", err)
@@ -447,15 +443,10 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		return
 	}
 
-	
 	responseAsk := h.processAskResponseData(finalConversation, resp)
 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 	h.broadcastAskResponse(ctx, finalConversation, responseAsk)
 }
-
-
-
-
 
 func (h *ChatHandler) ensureWebSocketConnection() {
 	if !h.wsClient.IsConnected() {
@@ -552,7 +543,7 @@ func (h *ChatHandler) ensureConversationFromResponse(reqPlatform, reqUniqueID st
 
 	conversation, err := h.service.GetConversationByID(conversationID)
 	if err != nil {
-		
+
 		conversation = &Conversation{
 			ID:               conversationID,
 			StartTimestamp:   time.Now(),
@@ -578,7 +569,6 @@ func (h *ChatHandler) processAskResponseData(conversation *Conversation, resp *e
 		responseCitations = external.FlexibleCitationArray{}
 		responseQuestionCategory = []string{}
 
-		
 		existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)
 		if err != nil || existingHelpdesk == nil {
 			err = h.helpdeskService.Create(&helpdesk.Helpdesk{
@@ -591,13 +581,13 @@ func (h *ChatHandler) processAskResponseData(conversation *Conversation, resp *e
 				log.Printf("Error creating helpdesk: %v", err)
 			}
 		}
-	if !conversation.IsHelpdesk {
-            conversation.IsHelpdesk = true
-            // Pastikan EndTimestamp tidak nil jika required, atau biarkan existing
-            if err := h.service.UpdateConversation(conversation); err != nil {
-                log.Printf("Failed to update conversation is_helpdesk status: %v", err)
-            }
-        }
+		if !conversation.IsHelpdesk {
+			conversation.IsHelpdesk = true
+			// Pastikan EndTimestamp tidak nil jika required, atau biarkan existing
+			if err := h.service.UpdateConversation(conversation); err != nil {
+				log.Printf("Failed to update conversation is_helpdesk status: %v", err)
+			}
+		}
 	} else {
 		responseAnswer = resp.Answer
 		responseCitations = resp.Citations
@@ -654,7 +644,7 @@ func (h *ChatHandler) broadcastAskResponse(ctx *gin.Context, conversation *Conve
 		err := h.externalClient.SendMessageToAPI(responseAsk)
 		if err != nil {
 			log.Printf("Error sending to Multi Channel API: %v", err)
-			
+
 		}
 	}
 }
@@ -666,7 +656,7 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 	if sessionIDParam != "" && sessionIDParam != "all" {
 		parsed, err := uuid.Parse(sessionIDParam)
 		if err != nil {
-			util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID )
+			util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID)
 			return
 		}
 		sessionID = &parsed
@@ -700,8 +690,6 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 		boolVal := val == "true" || val == "1"
 		isAnsweredFilter = &boolVal
 	} else {
-		// TAMBAHAN: Set default ke FALSE jika tidak ada parameter di URL
-		// Ini memaksa tampilkan yang belum terjawab saja secara default
 		defaultFalse := false
 		isAnsweredFilter = &defaultFalse
 	}
@@ -730,7 +718,7 @@ func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
 func (h *ChatHandler) DebugChatHistory(ctx *gin.Context) {
 	sessionID, err := uuid.Parse(ctx.Param("session_id"))
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID )
+		util.ErrorResponse(ctx, http.StatusBadRequest, invalidSessionID)
 		return
 	}
 
@@ -780,7 +768,13 @@ func (h *ChatHandler) ValidateAnswer(ctx *gin.Context) {
 		req.Revision = req.Answer
 	}
 
-	if err := h.service.UpdateIsAnsweredStatus(req.QuestionID, req.AnswerID, req.Revision, req.Validate); err != nil {
+	userID, exists := ctx.Get("user_id")
+	if !exists {
+		util.ErrorResponse(ctx, http.StatusUnauthorized, isNotAuthenticated)
+		return
+	}
+
+	if err := h.service.UpdateIsAnsweredStatus(req.QuestionID, req.AnswerID, req.Revision, req.Validate, userID); err != nil {
 		log.Println("Error updating is_answered status:", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to update validation status")
 		return

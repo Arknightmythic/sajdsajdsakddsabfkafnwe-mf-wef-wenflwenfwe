@@ -82,3 +82,5 @@ docker-data/
 uploads
 
 .scannerwork
+
+sonar-project.properties
