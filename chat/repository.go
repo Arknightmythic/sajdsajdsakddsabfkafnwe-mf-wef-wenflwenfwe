@@ -394,16 +394,14 @@ func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniq
 }
 
 func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]ChatPair, int, error) {
-	
+
 	histories, err := r.fetchRawHistories(sessionID, filter)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	
 	pairs := r.buildChatPairs(histories, filter)
 
-	
 	return r.sortAndPaginatePairs(pairs, filter)
 }
 
@@ -482,9 +480,7 @@ func (r *ChatRepository) buildChatPairs(histories []chatHistoryWithPlatform, fil
 				pairs = append(pairs, pair)
 			}
 		} else {
-			
-			
-			
+
 			i--
 		}
 	}
@@ -569,7 +565,7 @@ func (r *ChatRepository) matchAnsweredFilter(pair ChatPair, filterVal *bool) boo
 }
 
 func (r *ChatRepository) sortAndPaginatePairs(pairs []ChatPair, filter ChatHistoryFilter) ([]ChatPair, int, error) {
-	
+
 	if strings.ToUpper(filter.SortDirection) == "DESC" || filter.SortDirection == "" {
 		sort.SliceStable(pairs, func(i, j int) bool {
 			return pairs[i].CreatedAt.After(pairs[j].CreatedAt)
@@ -580,7 +576,6 @@ func (r *ChatRepository) sortAndPaginatePairs(pairs []ChatPair, filter ChatHisto
 		})
 	}
 
-	
 	total := len(pairs)
 	if filter.Limit <= 0 {
 		filter.Limit = 10
@@ -645,21 +640,22 @@ func getMessageRole(msg Message) string {
 	return ""
 }
 
-func (r *ChatRepository) UpdateIsAnsweredStatus(questionID, answerID int, revision string, isValidated bool) error {
+func (r *ChatRepository) UpdateIsAnsweredStatus(questionID, answerID int, revision string, isValidated bool, userID any) error {
 	tx, err := r.db.Beginx()
 	if err != nil {
 		return err
 	}
+
 	defer tx.Rollback()
 
-	queryQuestion := `UPDATE chat_history SET is_validated = $1, is_cannot_answer = $2 WHERE id = $3`
-	_, err = tx.Exec(queryQuestion, isValidated, !isValidated, questionID)
+	queryQuestion := `UPDATE chat_history SET is_validated = $1, is_cannot_answer = $2, validator = $3 WHERE id = $4`
+	_, err = tx.Exec(queryQuestion, isValidated, !isValidated, userID, questionID)
 	if err != nil {
 		return err
 	}
 
-	queryAnswer := `UPDATE chat_history SET is_validated = $1, is_cannot_answer = $2, revision = $3 WHERE id = $4`
-	_, err = tx.Exec(queryAnswer, isValidated, !isValidated, revision, answerID)
+	queryAnswer := `UPDATE chat_history SET is_validated = $1, is_cannot_answer = $2, revision = $3, validator = $4 WHERE id = $5`
+	_, err = tx.Exec(queryAnswer, isValidated, !isValidated, revision, userID, answerID)
 	if err != nil {
 		return err
 	}
