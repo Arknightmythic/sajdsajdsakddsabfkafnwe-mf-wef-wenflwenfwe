@@ -43,7 +43,6 @@ func (h *HelpdeskHandler) UpdateSwitchStatus(ctx *gin.Context) {
 		Status bool `json:"status"`
 	}
 
-	// Gunakan ShouldBindJSON untuk mapping true/false dari JSON body
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(ctx, http.StatusBadRequest, isInvalidBody)
 		return
@@ -91,7 +90,7 @@ func (h *HelpdeskHandler) GetAll(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
 	search := ctx.DefaultQuery("search", "")
-	status := ctx.DefaultQuery("status", "") // Baca parameter status
+	status := ctx.DefaultQuery("status", "")
 
 	if limit <= 0 {
 		limit = 10
@@ -103,7 +102,6 @@ func (h *HelpdeskHandler) GetAll(ctx *gin.Context) {
 		offset = 0
 	}
 
-	// Panggil service dengan status
 	helpdesks, total, err := h.service.GetAll(limit, offset, search, status)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())

@@ -36,11 +36,22 @@ type FileData struct {
 	Content  []byte
 }
 
-
 type CrawlerUploadResult struct {
 	Filename string `json:"filename"`
-	Status   string `json:"status"` 
+	Status   string `json:"status"`
 	Reason   string `json:"reason,omitempty"`
+}
+
+type fileProcessingContext struct {
+	category    string
+	email       string
+	accountType string
+	uploadDir   string
+	validTypes  map[string]bool
+	maxFileSize int
+	batchID     string
+	workerID    int
+	autoApprove bool
 }
 
 func NewDocumentService(repo *DocumentRepository, redisClient *redis.Client, asyncProcessor *AsyncProcessor, externalClient *external.Client) *DocumentService {
@@ -65,7 +76,6 @@ func (s *DocumentService) GenerateViewToken(filename string) (string, error) {
 	return token, nil
 }
 
-
 func (s *DocumentService) GenerateViewTokenByID(id int) (string, error) {
 	detail, err := s.repo.GetDocumentDetailByID(id)
 	if err != nil {
@@ -75,20 +85,19 @@ func (s *DocumentService) GenerateViewTokenByID(id int) (string, error) {
 }
 
 func (s *DocumentService) CreateDocument(document *Document, detail *DocumentDetail) error {
-    existing, err := s.repo.CheckDuplicationFileByDocumentName(detail.DocumentName)
-    if err == nil && existing != nil {
-        return fmt.Errorf("menolak upload karena file dengan document yang sama namanya sudah ada")
-    }
-    if err := s.repo.CreateDocument(document); err != nil {
-        return err
-    }
+	existing, err := s.repo.CheckDuplicationFileByDocumentName(detail.DocumentName)
+	if err == nil && existing != nil {
+		return fmt.Errorf("menolak upload karena file dengan document yang sama namanya sudah ada")
+	}
+	if err := s.repo.CreateDocument(document); err != nil {
+		return err
+	}
 
-    
-    newReq := "NEW"
-    detail.RequestType = &newReq
-    detail.DocumentID = document.ID
-    
-    return s.repo.CreateDocumentDetail(detail)
+	newReq := "NEW"
+	detail.RequestType = &newReq
+	detail.DocumentID = document.ID
+
+	return s.repo.CreateDocumentDetail(detail)
 }
 
 func (s *DocumentService) UpdateDocument(documentID int, detail *DocumentDetail) error {
@@ -101,9 +110,8 @@ func (s *DocumentService) UpdateDocument(documentID int, detail *DocumentDetail)
 	detail.IsLatest = &falseValue
 	detail.DocumentID = documentID
 
-    
-    reqType := "UPDATE"
-    detail.RequestType = &reqType 
+	reqType := "UPDATE"
+	detail.RequestType = &reqType
 
 	return s.repo.CreateDocumentDetail(detail)
 }
@@ -131,11 +139,10 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 		return fmt.Errorf("failed to get document detail: %w", err)
 	}
 
-    
-    if detail.RequestType != nil && *detail.RequestType == "DELETE" {
-        
-        return s.ExecuteHardDelete(detail.DocumentID) 
-    }
+	if detail.RequestType != nil && *detail.RequestType == "DELETE" {
+
+		return s.ExecuteHardDelete(detail.DocumentID)
+	}
 
 	if detail.Status != nil && *detail.Status == "Approved" {
 		return fmt.Errorf("document is already approved")
@@ -203,17 +210,15 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 }
 
 func (s *DocumentService) RejectDocument(detailID int) error {
-    detail, err := s.repo.GetDocumentDetailByID(detailID)
-    if err != nil {
-        return err
-    }
+	detail, err := s.repo.GetDocumentDetailByID(detailID)
+	if err != nil {
+		return err
+	}
 
-    
-    if detail.RequestType != nil && *detail.RequestType == "DELETE" {
-        return s.repo.RestoreStatus(detailID)
-    }
+	if detail.RequestType != nil && *detail.RequestType == "DELETE" {
+		return s.repo.RestoreStatus(detailID)
+	}
 
-    
 	if err := s.repo.UpdateDocumentDetailApprove(detailID, false); err != nil {
 		return fmt.Errorf("failed to set is_approve to false: %w", err)
 	}
@@ -227,37 +232,34 @@ func (s *DocumentService) RejectDocument(detailID int) error {
 	return nil
 }
 func (s *DocumentService) RequestDelete(documentID int) error {
-    
-    detail, err := s.repo.GetApprovedLatestDocumentDetailByDocumentID(documentID)
-    if err != nil {
-        
-        
-        return fmt.Errorf("cannot delete: active document detail not found")
-    }
 
-    if detail.IngestStatus != nil && *detail.IngestStatus == "processing" {
-        return fmt.Errorf("tidak dapat mengajukan penghapusan karena dokumen sedang dalam proses ekstraksi")
-    }
+	detail, err := s.repo.GetApprovedLatestDocumentDetailByDocumentID(documentID)
+	if err != nil {
 
-    return s.repo.RequestDelete(detail.ID)
+		return fmt.Errorf("cannot delete: active document detail not found")
+	}
+
+	if detail.IngestStatus != nil && *detail.IngestStatus == "processing" {
+		return fmt.Errorf("tidak dapat mengajukan penghapusan karena dokumen sedang dalam proses ekstraksi")
+	}
+
+	return s.repo.RequestDelete(detail.ID)
 }
 
-
 func (s *DocumentService) BatchRequestDelete(ids []int) (int, []string) {
-    successCount := 0
-    var errorMessages []string
+	successCount := 0
+	var errorMessages []string
 
-    for _, id := range ids {
-        
-        
-        err := s.RequestDelete(id)
-        if err != nil {
-            errorMessages = append(errorMessages, fmt.Sprintf("ID %d: %v", id, err))
-        } else {
-            successCount++
-        }
-    }
-    return successCount, errorMessages
+	for _, id := range ids {
+
+		err := s.RequestDelete(id)
+		if err != nil {
+			errorMessages = append(errorMessages, fmt.Sprintf("ID %d: %v", id, err))
+		} else {
+			successCount++
+		}
+	}
+	return successCount, errorMessages
 }
 
 func (s *DocumentService) ExecuteHardDelete(documentID int) error {
@@ -303,35 +305,33 @@ func (s *DocumentService) ExecuteHardDelete(documentID int) error {
 }
 
 func (s *DocumentService) DeleteDocument(documentID int) error {
-    
-    details, err := s.repo.GetDocumentDetailsByDocumentID(documentID)
-    if err != nil || len(details) == 0 {
-        return fmt.Errorf("dokumen tidak ditemukan")
-    }
 
-    latest := details[0]
+	details, err := s.repo.GetDocumentDetailsByDocumentID(documentID)
+	if err != nil || len(details) == 0 {
+		return fmt.Errorf("dokumen tidak ditemukan")
+	}
 
-    
-    isApproved := latest.Status != nil && *latest.Status == "Approved"
-    isRejected := latest.Status != nil && *latest.Status == "Rejected"
-    
-    isPendingNew := latest.Status != nil && *latest.Status == "Pending" &&
-                    latest.RequestType != nil && *latest.RequestType == "NEW"
+	latest := details[0]
 
-    
-    if isPendingNew || isRejected {
-        
-        log.Printf("Menghapus permanen dokumen ID %d", documentID)
-        return s.ExecuteHardDelete(documentID)
-    }
+	isApproved := latest.Status != nil && *latest.Status == "Approved"
+	isRejected := latest.Status != nil && *latest.Status == "Rejected"
 
-    if isApproved {
-        
-        log.Printf("Mengajukan request delete untuk dokumen ID %d", documentID)
-        return s.RequestDelete(documentID)
-    }
+	isPendingNew := latest.Status != nil && *latest.Status == "Pending" &&
+		latest.RequestType != nil && *latest.RequestType == "NEW"
 
-    return fmt.Errorf("dokumen tidak dapat dihapus dalam status saat ini")
+	if isPendingNew || isRejected {
+
+		log.Printf("Menghapus permanen dokumen ID %d", documentID)
+		return s.ExecuteHardDelete(documentID)
+	}
+
+	if isApproved {
+
+		log.Printf("Mengajukan request delete untuk dokumen ID %d", documentID)
+		return s.RequestDelete(documentID)
+	}
+
+	return fmt.Errorf("dokumen tidak dapat dihapus dalam status saat ini")
 }
 
 func GenerateUniqueFilename(originalFilename string) string {
@@ -418,16 +418,36 @@ type batchStats struct {
 	mu          sync.Mutex
 }
 
+type batchWorkerConfig struct {
+	category    string
+	email       string
+	accountType string
+	uploadDir   string
+	validTypes  map[string]bool
+	maxFileSize int
+	batchID     string
+	autoApprove bool
+}
+
 func (s *DocumentService) processBatchUpload(batchID string, files []FileData, category, email, accountType string, autoApprove bool) {
-	
 	uploadDir, maxFileSize, validTypes, err := s.prepareBatchEnv(batchID)
 	if err != nil {
 		return
 	}
 
-	
 	stats := &batchStats{
 		total:       len(files),
+		batchID:     batchID,
+		autoApprove: autoApprove,
+	}
+
+	config := &batchWorkerConfig{
+		category:    category,
+		email:       email,
+		accountType: accountType,
+		uploadDir:   uploadDir,
+		validTypes:  validTypes,
+		maxFileSize: maxFileSize,
 		batchID:     batchID,
 		autoApprove: autoApprove,
 	}
@@ -436,26 +456,19 @@ func (s *DocumentService) processBatchUpload(batchID string, files []FileData, c
 	jobs := make(chan FileData, len(files))
 	var wg sync.WaitGroup
 
-	
 	for w := 0; w < workerCount; w++ {
 		wg.Add(1)
-		go s.runBatchWorker(w, jobs, &wg, stats, category, email, accountType, uploadDir, validTypes, maxFileSize)
+		go s.runBatchWorker(w, jobs, &wg, stats, config)
 	}
 
-	
 	for _, file := range files {
 		jobs <- file
 	}
 	close(jobs)
 
-	
 	wg.Wait()
 	s.finalizeBatch(stats)
 }
-
-
-
-
 
 func (s *DocumentService) prepareBatchEnv(batchID string) (string, int, map[string]bool, error) {
 	uploadDir := config.GetUploadPath()
@@ -475,14 +488,23 @@ func (s *DocumentService) prepareBatchEnv(batchID string) (string, int, map[stri
 	return uploadDir, maxFileSize, validTypes, nil
 }
 
-func (s *DocumentService) runBatchWorker(workerID int, jobs <-chan FileData, wg *sync.WaitGroup, stats *batchStats, category, email, accountType, uploadDir string, validTypes map[string]bool, maxFileSize int) {
+func (s *DocumentService) runBatchWorker(workerID int, jobs <-chan FileData, wg *sync.WaitGroup, stats *batchStats, config *batchWorkerConfig) {
 	defer wg.Done()
 
 	for file := range jobs {
-		documentID, detailID, success := s.processFileDataWithExtraction(
-			file, category, email, accountType, uploadDir,
-			validTypes, maxFileSize, stats.batchID, workerID, stats.autoApprove,
-		)
+		ctx := &fileProcessingContext{
+			category:    config.category,
+			email:       config.email,
+			accountType: config.accountType,
+			uploadDir:   config.uploadDir,
+			validTypes:  config.validTypes,
+			maxFileSize: config.maxFileSize,
+			batchID:     config.batchID,
+			workerID:    workerID,
+			autoApprove: config.autoApprove,
+		}
+
+		documentID, detailID, success := s.processFileDataWithExtraction(file, ctx)
 
 		s.updateBatchStats(stats, success, documentID, detailID)
 	}
@@ -534,41 +556,40 @@ func (s *DocumentService) finalizeBatch(stats *batchStats) {
 }
 
 func (s *DocumentService) processFileDataWithExtraction(
-	fileData FileData, category, email, accountType, uploadDir string,
-	validTypes map[string]bool, maxFileSize int, batchID string,
-	workerID int, autoApprove bool,
+	fileData FileData,
+	ctx *fileProcessingContext,
 ) (int, int, bool) {
 	originalFilename := fileData.Filename
 
-	if fileData.Size > int64(maxFileSize) {
-		log.Printf("Batch %s Worker %d: File %s exceeds size limit", batchID, workerID, originalFilename)
+	if fileData.Size > int64(ctx.maxFileSize) {
+		log.Printf("Batch %s Worker %d: File %s exceeds size limit", ctx.batchID, ctx.workerID, originalFilename)
 		return 0, 0, false
 	}
 
 	ext := strings.ToLower(filepath.Ext(originalFilename))
 	dataType := strings.TrimPrefix(ext, ".")
-	if !validTypes[dataType] {
-		log.Printf("Batch %s Worker %d: File %s has invalid type", batchID, workerID, originalFilename)
+	if !ctx.validTypes[dataType] {
+		log.Printf("Batch %s Worker %d: File %s has invalid type", ctx.batchID, ctx.workerID, originalFilename)
 		return 0, 0, false
 	}
 
 	uniqueFilename := GenerateUniqueFilename(originalFilename)
-	filePath := filepath.Join(uploadDir, uniqueFilename)
+	filePath := filepath.Join(ctx.uploadDir, uniqueFilename)
 
 	if err := os.WriteFile(filePath, fileData.Content, 0644); err != nil {
-		log.Printf("Batch %s Worker %d: Failed to write file %s: %v", batchID, workerID, originalFilename, err)
+		log.Printf("Batch %s Worker %d: Failed to write file %s: %v", ctx.batchID, ctx.workerID, originalFilename, err)
 		return 0, 0, false
 	}
 
 	document := &Document{
-		Category: category,
+		Category: ctx.category,
 	}
 
 	isLatest := true
 	var status string
 	var isApprove *bool
 
-	if autoApprove {
+	if ctx.autoApprove {
 		status = "Approved"
 		approveTrue := true
 		isApprove = &approveTrue
@@ -581,36 +602,36 @@ func (s *DocumentService) processFileDataWithExtraction(
 		DocumentName: originalFilename,
 		Filename:     uniqueFilename,
 		DataType:     dataType,
-		Staff:        email,
-		Team:         accountType,
+		Staff:        ctx.email,
+		Team:         ctx.accountType,
 		Status:       &status,
 		IsLatest:     &isLatest,
 		IsApprove:    isApprove,
 	}
 
 	if err := s.CreateDocument(document, detail); err != nil {
-		log.Printf("Batch %s Worker %d: Database error for file %s: %v", batchID, workerID, originalFilename, err)
+		log.Printf("Batch %s Worker %d: Database error for file %s: %v", ctx.batchID, ctx.workerID, originalFilename, err)
 		os.Remove(filePath)
 		return 0, 0, false
 	}
 
-	if autoApprove {
+	if ctx.autoApprove {
 		extractReq := external.ExtractRequest{
 			ID:       strconv.Itoa(document.ID),
-			Category: category,
+			Category: ctx.category,
 			Filename: originalFilename,
 			FilePath: filePath,
 		}
 
 		if err := s.externalClient.ExtractDocument(extractReq); err != nil {
 			log.Printf("Batch %s Worker %d: Failed to extract file %s (ID: %d) to external API: %v",
-				batchID, workerID, originalFilename, document.ID, err)
+				ctx.batchID, ctx.workerID, originalFilename, document.ID, err)
 
 			return document.ID, detail.ID, true
 		}
 
 		log.Printf("Batch %s Worker %d: Successfully extracted file %s (ID: %d) to external API",
-			batchID, workerID, originalFilename, document.ID)
+			ctx.batchID, ctx.workerID, originalFilename, document.ID)
 	}
 
 	return document.ID, detail.ID, true
@@ -688,18 +709,15 @@ func (s *DocumentService) BatchDeleteDocuments(ids []int) (int, []string) {
 	return successCount, errorMessages
 }
 
-
 func (s *DocumentService) GenerateViewTokenByDocumentID(documentID int) (string, error) {
-	
+
 	detail, err := s.repo.GetApprovedLatestDocumentDetailByDocumentID(documentID)
 	if err != nil {
 		return "", fmt.Errorf("approved and latest document detail not found for document_id %d: %w", documentID, err)
 	}
 
-	
 	return s.GenerateViewToken(detail.Filename)
 }
-
 
 func (s *DocumentService) ProcessCrawlerBatch(files []*multipart.FileHeader, category string) ([]CrawlerUploadResult, error) {
 	uploadDir := config.GetUploadPath()
@@ -715,75 +733,118 @@ func (s *DocumentService) ProcessCrawlerBatch(files []*multipart.FileHeader, cat
 
 func (s *DocumentService) processSingleCrawlerFile(fileHeader *multipart.FileHeader, category, uploadDir string) CrawlerUploadResult {
 	originalName := fileHeader.Filename
-	
+
 	existing, err := s.repo.GetLatestDetailByDocumentName(originalName)
 	isExist := err == nil && existing != nil
 
 	if isExist {
-		
-		
-		if existing.Status != nil && *existing.Status == "Approved" &&
-			existing.IsApprove != nil && *existing.IsApprove && 
-			existing.IngestStatus != nil {
-			
-			return CrawlerUploadResult{
-				Filename: originalName,
-				Status:   "Skipped",
-				Reason:   "Document already exists and is Approved/Ingested",
-			}
-		}
-
-		
-		
-		isPending := existing.Status != nil && *existing.Status == "Pending" && existing.IsApprove == nil
-		isRejected := existing.Status != nil && *existing.Status == "Rejected"
-
-		if isPending || isRejected {
-			
-			oldFilePath := filepath.Join(uploadDir, existing.Filename)
-			
-			_ = os.Remove(oldFilePath)
-
-			
-			
-			if err := s.DeleteDocument(existing.DocumentID); err != nil {
-				return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to delete old rejected/pending document"}
-			}
-			
-			
-		} else {
-			
-			return CrawlerUploadResult{
-				Filename: originalName,
-				Status:   "Skipped",
-				Reason:   "Document exists with unhandled status: " + *existing.Status,
-			}
+		if result, shouldReturn := s.handleExistingDocument(existing, originalName, uploadDir); shouldReturn {
+			return result
 		}
 	}
 
+	content, err := s.readFileContent(fileHeader)
+	if err != nil {
+		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: err.Error()}
+	}
+
+	uniqueFilename, err := s.saveFileToDisk(content, originalName, uploadDir)
+	if err != nil {
+		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: err.Error()}
+	}
+
+	if err := s.createDocumentRecord(originalName, uniqueFilename, category, uploadDir); err != nil {
+		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Database insert failed"}
+	}
+
+	finalStatus := "Uploaded"
+	if isExist {
+		finalStatus = "Replaced"
+	}
+
+	return CrawlerUploadResult{
+		Filename: originalName,
+		Status:   finalStatus,
+	}
+}
+
+func (s *DocumentService) handleExistingDocument(existing *DocumentDetail, originalName, uploadDir string) (CrawlerUploadResult, bool) {
+	if s.isApprovedAndIngested(existing) {
+		return CrawlerUploadResult{
+			Filename: originalName,
+			Status:   "Skipped",
+			Reason:   "Document already exists and is Approved/Ingested",
+		}, true
+	}
+
+	if s.shouldReplaceDocument(existing) {
+		if err := s.deleteOldDocument(existing, uploadDir); err != nil {
+			return CrawlerUploadResult{
+				Filename: originalName,
+				Status:   "Error",
+				Reason:   "Failed to delete old rejected/pending document",
+			}, true
+		}
+		return CrawlerUploadResult{}, false
+	}
+
+	return CrawlerUploadResult{
+		Filename: originalName,
+		Status:   "Skipped",
+		Reason:   "Document exists with unhandled status: " + *existing.Status,
+	}, true
+}
+
+func (s *DocumentService) isApprovedAndIngested(doc *DocumentDetail) bool {
+	return doc.Status != nil && *doc.Status == "Approved" &&
+		doc.IsApprove != nil && *doc.IsApprove &&
+		doc.IngestStatus != nil
+}
+
+func (s *DocumentService) shouldReplaceDocument(doc *DocumentDetail) bool {
+	isPending := doc.Status != nil && *doc.Status == "Pending" && doc.IsApprove == nil
+	isRejected := doc.Status != nil && *doc.Status == "Rejected"
+	return isPending || isRejected
+}
+
+func (s *DocumentService) deleteOldDocument(doc *DocumentDetail, uploadDir string) error {
+	oldFilePath := filepath.Join(uploadDir, doc.Filename)
+	_ = os.Remove(oldFilePath) // Ignore error if file doesn't exist
+
+	return s.DeleteDocument(doc.DocumentID)
+}
+
+func (s *DocumentService) readFileContent(fileHeader *multipart.FileHeader) ([]byte, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
-		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to open file"}
+		return nil, fmt.Errorf("Failed to open file")
 	}
 	defer file.Close()
 
 	content, err := io.ReadAll(file)
 	if err != nil {
-		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to read content"}
+		return nil, fmt.Errorf("Failed to read content")
 	}
 
+	return content, nil
+}
+
+func (s *DocumentService) saveFileToDisk(content []byte, originalName, uploadDir string) (string, error) {
 	uniqueFilename := GenerateUniqueFilename(originalName)
 	filePath := filepath.Join(uploadDir, uniqueFilename)
 
 	if err := os.WriteFile(filePath, content, 0644); err != nil {
-		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Failed to save to disk"}
+		return "", fmt.Errorf("Failed to save to disk")
 	}
 
-	
+	return uniqueFilename, nil
+}
+
+func (s *DocumentService) createDocumentRecord(originalName, uniqueFilename, category, uploadDir string) error {
 	doc := &Document{Category: category}
 	isLatest := true
-	status := "Pending" 
-	
+	status := "Pending"
+
 	detail := &DocumentDetail{
 		DocumentName: originalName,
 		Filename:     uniqueFilename,
@@ -797,21 +858,12 @@ func (s *DocumentService) processSingleCrawlerFile(fileHeader *multipart.FileHea
 	}
 
 	if err := s.CreateDocument(doc, detail); err != nil {
+		filePath := filepath.Join(uploadDir, uniqueFilename)
 		os.Remove(filePath)
-		return CrawlerUploadResult{Filename: originalName, Status: "Error", Reason: "Database insert failed"}
+		return err
 	}
 
-	
-	finalStatus := "Uploaded"
-	if isExist {
-		
-		finalStatus = "Replaced" 
-	}
-
-	return CrawlerUploadResult{
-		Filename: originalName,
-		Status:   finalStatus,
-	}
+	return nil
 }
 
 func (s *DocumentService) CheckDuplicates(filenames []string) ([]string, error) {

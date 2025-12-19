@@ -19,26 +19,22 @@ func NewTeamRepository(db *sqlx.DB) *TeamRepository {
 }
 
 func (r *TeamRepository) RevokeRolePermissions(teamID int, bannedPermIDs []string) error {
-	// 1. Buat map untuk lookup cepat
 	bannedMap := make(map[string]bool)
 	for _, id := range bannedPermIDs {
 		bannedMap[id] = true
 	}
 
-	// 2. Ambil semua role milik team ini (hanya ID dan Permissions)
 	var roles []rolePartial
 	err := r.db.Select(&roles, "SELECT id, permissions FROM roles WHERE team_id = $1", teamID)
 	if err != nil {
 		return err
 	}
 
-	// 3. Loop setiap role, filter permission-nya, dan update jika berubah
 	for _, role := range roles {
 		var newPerms pq.StringArray
 		changed := false
 
 		for _, p := range role.Permissions {
-			// Jika permission ID ini termasuk yang dilarang (banned), skip (jangan dimasukkan ke newPerms)
 			if bannedMap[p] {
 				changed = true
 			} else {
@@ -47,7 +43,6 @@ func (r *TeamRepository) RevokeRolePermissions(teamID int, bannedPermIDs []strin
 		}
 
 		if changed {
-			// Update role di database dengan list permission yang baru
 			_, err := r.db.Exec("UPDATE roles SET permissions = $1 WHERE id = $2", newPerms, role.ID)
 			if err != nil {
 				return err

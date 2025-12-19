@@ -19,14 +19,13 @@ func NewHelpdeskRepository(db *sqlx.DB) *HelpdeskRepository {
 
 func (r *HelpdeskRepository) GetSwitchStatus() (*SwitchHelpdesk, error) {
 	var sh SwitchHelpdesk
-	// Ambil 1 baris data. LIMIT 1 memastikan kita hanya mengambil satu.
+
 	query := `SELECT id, status FROM switch_helpdesk LIMIT 1`
 	err := r.db.Get(&sh, query)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// Jika tabel kosong, INSERT default value (false/off)
-			// Kita return data yang baru di-insert
+
 			insertQuery := `INSERT INTO switch_helpdesk (status) VALUES (false) RETURNING id, status`
 			err = r.db.QueryRowx(insertQuery).StructScan(&sh)
 			if err != nil {
@@ -41,14 +40,12 @@ func (r *HelpdeskRepository) GetSwitchStatus() (*SwitchHelpdesk, error) {
 }
 
 func (r *HelpdeskRepository) UpdateSwitchStatus(status bool) (*SwitchHelpdesk, error) {
-	// Pastikan data ada dulu sebelum update (handle case extremely rare race condition atau tabel kosong saat update)
-	// Kita reuse logic GetSwitchStatus untuk memastikan row dibuat jika belum ada
+
 	_, err := r.GetSwitchStatus()
 	if err != nil {
 		return nil, err
 	}
 
-	// Update baris yang ada (menggunakan subquery ID dari limit 1 agar aman walau ID berapapun)
 	query := `
 		UPDATE switch_helpdesk 
 		SET status = $1 
@@ -73,7 +70,7 @@ func (r *HelpdeskRepository) Create(helpdesk *Helpdesk) error {
 }
 
 func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status string) ([]Helpdesk, int, error) {
-	helpdesks := []Helpdesk{} // Inisialisasi slice kosong
+	helpdesks := []Helpdesk{}
 	var conditions []string
 	var args []interface{}
 	argIdx := 1
@@ -81,16 +78,13 @@ func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status str
 	query := `SELECT id, session_id, platform, platform_unique_id, status, user_id, created_at 
 			  FROM helpdesk`
 
-	// Filter Search (General)
 	if search != "" {
-		// PERBAIKAN DI SINI: Tambahkan "OR session_id::text ILIKE ..."
-		// Kita perlu cast UUID ke text agar bisa di-ILIKE
+
 		conditions = append(conditions, fmt.Sprintf("(platform ILIKE $%d OR platform_unique_id ILIKE $%d OR session_id::text ILIKE $%d)", argIdx, argIdx, argIdx))
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
 
-	// Filter Status (Specific)
 	if status != "" {
 		conditions = append(conditions, fmt.Sprintf("status ILIKE $%d", argIdx))
 		args = append(args, status)
@@ -102,7 +96,6 @@ func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status str
 		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	// Count query
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM helpdesk %s", where)
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
@@ -113,7 +106,6 @@ func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status str
 		return []Helpdesk{}, 0, nil
 	}
 
-	// Main query
 	fullQuery := fmt.Sprintf("%s %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", query, where, argIdx, argIdx+1)
 	args = append(args, limit, offset)
 

@@ -3,20 +3,21 @@ package document
 import (
 	"fmt"
 	"strings"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
 const (
-	isQuerySearch = "(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)"
-	isFilterDataType = "dd.data_type = $%d"
-	isFilterCategoryType = "d.category = $%d"
-	isFilterStatusType = "dd.status = $%d"
-	isFilterCreateAt = "dd.created_at >= $%d"
+	isQuerySearch            = "(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)"
+	isFilterDataType         = "dd.data_type = $%d"
+	isFilterCategoryType     = "d.category = $%d"
+	isFilterStatusType       = "dd.status = $%d"
+	isFilterCreateAt         = "dd.created_at >= $%d"
 	isFilterRequestedAtStart = "dd.requested_at >= $%d"
-    isFilterRequestedAtEnd   = "dd.requested_at <= $%d"
-	isFilterEndAt = "dd.created_at <= $%d"
-	isQueryCreatedAt = "dd.created_at"
+	isFilterRequestedAtEnd   = "dd.requested_at <= $%d"
+	isFilterEndAt            = "dd.created_at <= $%d"
+	isQueryCreatedAt         = "dd.created_at"
 )
 
 type DocumentRepository struct {
@@ -33,15 +34,14 @@ func (r *DocumentRepository) CreateDocument(document *Document) error {
 }
 
 func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error {
-	
+
 	query := `
 		INSERT INTO document_details 
 		(document_id, document_name, filename, data_type, staff, team, status, is_latest, is_approve, created_at, ingest_status, request_type, requested_at) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, NOW()) 
 		RETURNING id, created_at, requested_at
 	`
-	
-	
+
 	reqType := "NEW"
 	if detail.RequestType != nil {
 		reqType = *detail.RequestType
@@ -59,7 +59,7 @@ func (r *DocumentRepository) CreateDocumentDetail(detail *DocumentDetail) error 
 		detail.IsLatest,
 		detail.IsApprove,
 		detail.IngestStatus,
-		reqType, 
+		reqType,
 	).Scan(&detail.ID, &detail.CreatedAt, &detail.RequestedAt)
 }
 
@@ -86,7 +86,7 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 		INNER JOIN document_details dd ON d.id = dd.document_id
 		WHERE dd.is_latest = true
 	`
-query := base
+	query := base
 	if len(conditions) > 0 {
 		query += " AND " + strings.Join(conditions, " AND ")
 	}
@@ -94,7 +94,7 @@ query := base
 	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
 	args = append(args, limit, offset)
-	
+
 	var documents []DocumentWithDetail
 	err := r.db.Select(&documents, query, args...)
 	if err != nil {
@@ -361,10 +361,6 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	return details, nil
 }
 
-
-
-
-
 func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFilter) ([]string, []interface{}, int) {
 	var conditions []string
 	var args []interface{}
@@ -555,10 +551,9 @@ func (r *DocumentRepository) GetApprovedLatestDocumentDetailByDocumentID(documen
 	return &detail, nil
 }
 
-
 func (r *DocumentRepository) GetLatestDetailByDocumentName(docName string) (*DocumentDetail, error) {
 	var detail DocumentDetail
-	
+
 	query := `
 		SELECT 
 			id, document_id, document_name, filename, data_type, staff, team, 
@@ -574,7 +569,6 @@ func (r *DocumentRepository) GetLatestDetailByDocumentName(docName string) (*Doc
 	return &detail, nil
 }
 
-
 func (r *DocumentRepository) DeleteDocumentDetailHard(id int) error {
 	_, err := r.db.Exec(`DELETE FROM document_details WHERE id = $1`, id)
 	return err
@@ -582,7 +576,7 @@ func (r *DocumentRepository) DeleteDocumentDetailHard(id int) error {
 
 func (r *DocumentRepository) CheckDuplicationFileByDocumentName(docName string) (*DocumentDetail, error) {
 	var detail DocumentDetail
-	
+
 	query := `
 		SELECT id, document_name 
 		FROM document_details
@@ -597,19 +591,19 @@ func (r *DocumentRepository) CheckDuplicationFileByDocumentName(docName string) 
 }
 
 func (r *DocumentRepository) CheckExistingDocuments(names []string) ([]string, error) {
-	duplicates := make([]string, 0) 
-	
+	duplicates := make([]string, 0)
+
 	query := `
 		SELECT document_name 
 		FROM document_details 
 		WHERE document_name = ANY($1) AND is_latest = true
 	`
-	
+
 	err := r.db.Select(&duplicates, query, pq.Array(names))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return duplicates, nil
 }
 func (r *DocumentRepository) RequestDelete(id int) error {
@@ -625,7 +619,6 @@ func (r *DocumentRepository) RequestDelete(id int) error {
 	return err
 }
 
-
 func (r *DocumentRepository) BatchRequestDelete(ids []int) error {
 	query := `
 		UPDATE document_details
@@ -639,7 +632,6 @@ func (r *DocumentRepository) BatchRequestDelete(ids []int) error {
 	return err
 }
 
-
 func (r *DocumentRepository) RestoreStatus(id int) error {
 	query := `
 		UPDATE document_details
@@ -651,10 +643,4 @@ func (r *DocumentRepository) RestoreStatus(id int) error {
 	`
 	_, err := r.db.Exec(query, id)
 	return err
-}
-
-func (r *DocumentRepository) UpdateStatus(id int, status string) error {
-    query := `UPDATE document_details SET status = $1 WHERE id = $2`
-    _, err := r.db.Exec(query, status, id)
-    return err
 }
