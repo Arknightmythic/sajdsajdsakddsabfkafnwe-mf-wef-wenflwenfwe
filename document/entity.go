@@ -62,6 +62,7 @@ type DocumentDetailFilter struct {
 	Category      string
 	Status        string
 	DocumentName  string
+	RequestType   string
 	Limit         int
 	Offset        int
 	SortBy        string

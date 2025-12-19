@@ -83,7 +83,7 @@ func (s *DocumentService) CreateDocument(document *Document, detail *DocumentDet
         return err
     }
 
-    // Explicit set NEW for new uploads
+    
     newReq := "NEW"
     detail.RequestType = &newReq
     detail.DocumentID = document.ID
@@ -101,7 +101,7 @@ func (s *DocumentService) UpdateDocument(documentID int, detail *DocumentDetail)
 	detail.IsLatest = &falseValue
 	detail.DocumentID = documentID
 
-    // --- PERBAIKAN: Set Tipe Request UPDATE ---
+    
     reqType := "UPDATE"
     detail.RequestType = &reqType 
 
@@ -131,10 +131,10 @@ func (s *DocumentService) ApproveDocument(detailID int) error {
 		return fmt.Errorf("failed to get document detail: %w", err)
 	}
 
-    // --- LOGIKA BARU: HANDLE DELETE REQUEST ---
+    
     if detail.RequestType != nil && *detail.RequestType == "DELETE" {
-        // Jika requestnya DELETE, panggil fungsi hard delete
-        return s.ExecuteHardDelete(detail.DocumentID) // Kita rename fungsi delete lama jadi ExecuteHardDelete agar jelas
+        
+        return s.ExecuteHardDelete(detail.DocumentID) 
     }
 
 	if detail.Status != nil && *detail.Status == "Approved" {
@@ -208,12 +208,12 @@ func (s *DocumentService) RejectDocument(detailID int) error {
         return err
     }
 
-    // --- BARU: Jika menolak DELETE, kembalikan jadi Approved ---
+    
     if detail.RequestType != nil && *detail.RequestType == "DELETE" {
         return s.repo.RestoreStatus(detailID)
     }
 
-    // --- BARU: Jika menolak UPDATE/NEW ---
+    
 	if err := s.repo.UpdateDocumentDetailApprove(detailID, false); err != nil {
 		return fmt.Errorf("failed to set is_approve to false: %w", err)
 	}
@@ -227,29 +227,29 @@ func (s *DocumentService) RejectDocument(detailID int) error {
 	return nil
 }
 func (s *DocumentService) RequestDelete(documentID int) error {
-    // Cari detail yang latest
+    
     detail, err := s.repo.GetApprovedLatestDocumentDetailByDocumentID(documentID)
     if err != nil {
-        // Fallback jika tidak ada approved (misal pending), ambil latest by name/id
-        // Atau return error
+        
+        
         return fmt.Errorf("cannot delete: active document detail not found")
     }
 
     if detail.IngestStatus != nil && *detail.IngestStatus == "processing" {
-        return fmt.Errorf("cannot delete document while it is being processed")
+        return fmt.Errorf("tidak dapat mengajukan penghapusan karena dokumen sedang dalam proses ekstraksi")
     }
 
     return s.repo.RequestDelete(detail.ID)
 }
 
-// 6. NEW: BatchRequestDelete
+
 func (s *DocumentService) BatchRequestDelete(ids []int) (int, []string) {
     successCount := 0
     var errorMessages []string
 
     for _, id := range ids {
-        // Note: ID yang dikirim frontend biasanya document_id (parent), bukan detail_id.
-        // Kita perlu cari detailnya dulu.
+        
+        
         err := s.RequestDelete(id)
         if err != nil {
             errorMessages = append(errorMessages, fmt.Sprintf("ID %d: %v", id, err))
@@ -303,7 +303,35 @@ func (s *DocumentService) ExecuteHardDelete(documentID int) error {
 }
 
 func (s *DocumentService) DeleteDocument(documentID int) error {
-    return s.RequestDelete(documentID)
+    
+    details, err := s.repo.GetDocumentDetailsByDocumentID(documentID)
+    if err != nil || len(details) == 0 {
+        return fmt.Errorf("dokumen tidak ditemukan")
+    }
+
+    latest := details[0]
+
+    
+    isApproved := latest.Status != nil && *latest.Status == "Approved"
+    isRejected := latest.Status != nil && *latest.Status == "Rejected"
+    
+    isPendingNew := latest.Status != nil && *latest.Status == "Pending" &&
+                    latest.RequestType != nil && *latest.RequestType == "NEW"
+
+    
+    if isPendingNew || isRejected {
+        
+        log.Printf("Menghapus permanen dokumen ID %d", documentID)
+        return s.ExecuteHardDelete(documentID)
+    }
+
+    if isApproved {
+        
+        log.Printf("Mengajukan request delete untuk dokumen ID %d", documentID)
+        return s.RequestDelete(documentID)
+    }
+
+    return fmt.Errorf("dokumen tidak dapat dihapus dalam status saat ini")
 }
 
 func GenerateUniqueFilename(originalFilename string) string {

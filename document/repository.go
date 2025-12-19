@@ -13,6 +13,8 @@ const (
 	isFilterCategoryType = "d.category = $%d"
 	isFilterStatusType = "dd.status = $%d"
 	isFilterCreateAt = "dd.created_at >= $%d"
+	isFilterRequestedAtStart = "dd.requested_at >= $%d"
+    isFilterRequestedAtEnd   = "dd.requested_at <= $%d"
 	isFilterEndAt = "dd.created_at <= $%d"
 	isQueryCreatedAt = "dd.created_at"
 )
@@ -266,7 +268,8 @@ func (r *DocumentRepository) GetDocumentDetailsByDocumentID(documentID int) ([]D
 	query := `
 		SELECT 
 			id, document_id, document_name, filename, data_type, staff, team, 
-			status, is_latest, is_approve, created_at, ingest_status
+			status, is_latest, is_approve, created_at, ingest_status,
+			request_type, requested_at
 		FROM document_details
 		WHERE document_id = $1
 		ORDER BY created_at DESC
@@ -373,6 +376,12 @@ func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFil
 		argIndex++
 	}
 
+	if filter.RequestType != "" {
+		conditions = append(conditions, fmt.Sprintf("dd.request_type = $%d", argIndex))
+		args = append(args, filter.RequestType)
+		argIndex++
+	}
+
 	if filter.DataType != "" {
 		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
 		args = append(args, filter.DataType)
@@ -398,12 +407,12 @@ func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFil
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterRequestedAtStart, argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
+		conditions = append(conditions, fmt.Sprintf(isFilterRequestedAtEnd, argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -412,7 +421,7 @@ func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFil
 }
 
 func (r *DocumentRepository) buildDetailSortClause(filter DocumentDetailFilter) string {
-	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true}
+	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true, "dd.request_type": true}
 	sortBy := isQueryCreatedAt
 
 	if filter.SortBy != "" {

@@ -620,6 +620,7 @@ func (h *DocumentHandler) GetAllDocumentDetails(ctx *gin.Context) {
 		Category:      ctx.Query("category"),
 		Status:        ctx.Query("status"),
 		DocumentName:  ctx.Query("document_name"),
+		RequestType:   ctx.Query("request_type"),
 		Limit:         limit,
 		Offset:        offset,
 		SortBy:        ctx.Query("sort_by"),
@@ -753,8 +754,7 @@ func (h *DocumentHandler) BatchDeleteDocument(c *gin.Context) {
 		return
 	}
 
-    // GANTI: Panggil BatchRequestDelete
-	successCount, errors := h.service.BatchRequestDelete(req.IDs)
+	successCount, errors := h.service.BatchDeleteDocuments(req.IDs)
 
 	if len(errors) > 0 && successCount == 0 {
 		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to request delete for all selected documents")
