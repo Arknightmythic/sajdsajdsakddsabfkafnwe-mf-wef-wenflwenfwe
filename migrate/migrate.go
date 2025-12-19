@@ -9,10 +9,6 @@ import (
 func RunMigrations(db *sqlx.DB) {
 	log.Println("Starting migrations...")
 
-	// Catatan: Urutan pembuatan tabel dipertahankan agar tidak error saat fresh install
-	// Users dibuat lebih dulu, kemudian Roles. Oleh karena itu Constraint Users -> Roles 
-	// sebaiknya ditangani via ALTER TABLE di bawah agar aman dari urutan pembuatan.
-
 	query := `
     -- 1. Independent Tables
     CREATE TABLE IF NOT EXISTS users (
@@ -36,7 +32,6 @@ func RunMigrations(db *sqlx.DB) {
         pages TEXT[]
     );
 
-    -- Updated: Menambahkan ON DELETE CASCADE pada definisi awal untuk fresh install
     CREATE TABLE IF NOT EXISTS roles (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
@@ -83,9 +78,26 @@ func RunMigrations(db *sqlx.DB) {
         is_ask_helpdesk BOOLEAN
     );
 
-    -- 2. Tables with Foreign Keys or Dependencies
-    -- Note: Table 'roles' sudah didefinisikan di atas, duplikasi IF NOT EXISTS aman tapi redundant.
+    CREATE TABLE IF NOT EXISTS switch_helpdesk (
+        id SERIAL PRIMARY KEY,
+        status BOOLEAN
+    );
 
+    CREATE TABLE IF NOT EXISTS url_format (
+        id SERIAL PRIMARY KEY,
+        kode VARCHAR(50) NOT NULL UNIQUE,
+        url TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS processed_messages (
+        message_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT processed_messages_pkey PRIMARY KEY (message_id, platform),
+        CONSTRAINT unique_msg_platform UNIQUE (message_id, platform)
+    );
+
+    -- 2. Tables with Foreign Keys or Dependencies
     CREATE TABLE IF NOT EXISTS document_details (
         id SERIAL PRIMARY KEY,
         document_id INT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -112,9 +124,10 @@ func RunMigrations(db *sqlx.DB) {
         feedback BOOLEAN,
         question_category TEXT,
         question_sub_category TEXT,
-        is_answered BOOLEAN,
+        is_answered BOOLEAN DEFAULT false NOT NULL,
         revision TEXT,
         is_validated BOOLEAN,
+        validator INT,
         start_timestamp TIMESTAMP,
         citation JSONB
     );
@@ -133,8 +146,8 @@ func RunMigrations(db *sqlx.DB) {
         session_id UUID NOT NULL REFERENCES conversations(id),
         platform VARCHAR(50) NOT NULL,
         platform_unique_id VARCHAR(100),
-        user_id INT NULL,
-        status VARCHAR(50) NULL,
+        user_id INT,
+        status VARCHAR(50),
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
     );
 
@@ -143,7 +156,18 @@ func RunMigrations(db *sqlx.DB) {
         subject VARCHAR,
         in_reply_to VARCHAR,
         "references" VARCHAR,
-        thread_key VARCHAR
+        thread_key VARCHAR,
+        CONSTRAINT unique_conversation_id UNIQUE (conversation_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS run_times (
+        id SERIAL PRIMARY KEY,
+        question_id SERIAL NOT NULL,
+        answer_id SERIAL NOT NULL,
+        qdrant_faq_time FLOAT8,
+        qdrant_main_time FLOAT8,
+        rerank_time FLOAT8,
+        llm_time FLOAT8
     );
 
     -- 3. Reporting / TBL Tables
@@ -172,32 +196,6 @@ func RunMigrations(db *sqlx.DB) {
         channel VARCHAR(50)
     );
 
-    -- Add data_type column if missing
-    DO $$ 
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                       WHERE table_name='document_details' AND column_name='data_type') THEN
-            ALTER TABLE document_details ADD COLUMN data_type VARCHAR(10);
-            UPDATE document_details SET data_type = 'pdf' WHERE data_type IS NULL;
-            ALTER TABLE document_details ALTER COLUMN data_type SET NOT NULL;
-        END IF;
-    END $$;
-
-    -- ============================================================
-    -- UPDATE FOREIGN KEY CONSTRAINTS (CASCADE & SET NULL)
-    -- ============================================================
-    
-    -- 1. Roles: Hapus FK lama jika ada, buat baru dengan ON DELETE CASCADE
-    ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_team_id_fkey;
-    ALTER TABLE roles ADD CONSTRAINT roles_team_id_fkey 
-        FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
-
-    -- 2. Users: Hapus FK lama jika ada, buat baru dengan ON DELETE SET NULL
-    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_id_fkey;
-    ALTER TABLE users ADD CONSTRAINT users_role_id_fkey 
-        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
-    
-    -- Masukkan tabel ini ke dalam string query
     CREATE TABLE IF NOT EXISTS tbl_user_conv_detail (
         conversation_id VARCHAR(50),
         message_id VARCHAR(50),
@@ -212,7 +210,37 @@ func RunMigrations(db *sqlx.DB) {
         sub_category VARCHAR(50)
     );
 
-    -- 4. Indices
+    -- ============================================================
+    -- UPDATE FOREIGN KEY CONSTRAINTS (CASCADE & SET NULL)
+    -- ============================================================
+    
+    -- 1. Roles: Drop old FK if exists, create new with ON DELETE CASCADE
+    DO $$ 
+    BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name='roles_team_id_fkey' AND table_name='roles') THEN
+            ALTER TABLE roles DROP CONSTRAINT roles_team_id_fkey;
+        END IF;
+    END $$;
+    
+    ALTER TABLE roles ADD CONSTRAINT roles_team_id_fkey 
+        FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+
+    -- 2. Users: Drop old FK if exists, create new with ON DELETE SET NULL
+    DO $$ 
+    BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name='users_role_id_fkey' AND table_name='users') THEN
+            ALTER TABLE users DROP CONSTRAINT users_role_id_fkey;
+        END IF;
+    END $$;
+    
+    ALTER TABLE users ADD CONSTRAINT users_role_id_fkey 
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
+
+    -- ============================================================
+    -- INDICES
+    -- ============================================================
     CREATE INDEX IF NOT EXISTS idx_chat_history_session_id ON chat_history(session_id);
     CREATE INDEX IF NOT EXISTS idx_chat_history_user_id ON chat_history(user_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_platform_unique_id ON conversations(platform_unique_id);
@@ -220,36 +248,58 @@ func RunMigrations(db *sqlx.DB) {
     CREATE INDEX IF NOT EXISTS idx_document_details_document_id ON document_details(document_id);
     CREATE INDEX IF NOT EXISTS idx_document_details_is_latest ON document_details(is_latest);
     CREATE INDEX IF NOT EXISTS idx_document_details_status ON document_details(status);
+    CREATE INDEX IF NOT EXISTS idx_email_metadata_thread_key ON email_metadata(thread_key);
 
-    -- 5. Column Alterations (Idempotency Checks)
+    -- ============================================================
+    -- COLUMN ALTERATIONS (Idempotency Checks)
+    -- ============================================================
     DO $$ 
     BEGIN
+        -- Ensure data_type column exists and has default value
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='document_details' AND column_name='data_type') THEN
+            ALTER TABLE document_details ADD COLUMN data_type VARCHAR(10);
+            UPDATE document_details SET data_type = 'pdf' WHERE data_type IS NULL;
+            ALTER TABLE document_details ALTER COLUMN data_type SET NOT NULL;
+        END IF;
+
         -- Updates for 'conversations'
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='is_positive_feedback') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='conversations' AND column_name='is_positive_feedback') THEN
             ALTER TABLE conversations ADD COLUMN is_positive_feedback BOOLEAN;
         END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='is_ask_helpdesk') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='conversations' AND column_name='is_ask_helpdesk') THEN
             ALTER TABLE conversations ADD COLUMN is_ask_helpdesk BOOLEAN;
         END IF;
 
         -- Updates for 'chat_history'
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_history' AND column_name='is_validated') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='chat_history' AND column_name='is_answered') THEN
+            ALTER TABLE chat_history ADD COLUMN is_answered BOOLEAN DEFAULT false NOT NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='chat_history' AND column_name='is_validated') THEN
             ALTER TABLE chat_history ADD COLUMN is_validated BOOLEAN;
         END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_history' AND column_name='start_timestamp') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='chat_history' AND column_name='start_timestamp') THEN
             ALTER TABLE chat_history ADD COLUMN start_timestamp TIMESTAMP;
         END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_history' AND column_name='citation') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='chat_history' AND column_name='citation') THEN
             ALTER TABLE chat_history ADD COLUMN citation JSONB;
         END IF;
 
         -- Updates for 'document_details'
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='document_details' AND column_name='ingest_status') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='document_details' AND column_name='ingest_status') THEN
             ALTER TABLE document_details ADD COLUMN ingest_status TEXT;
         END IF;
 
         -- Updates for 'users'
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='name') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_name='users' AND column_name='name') THEN
             ALTER TABLE users ADD COLUMN name VARCHAR(255);
             UPDATE users SET name = 'User' WHERE name IS NULL;
             ALTER TABLE users ALTER COLUMN name SET NOT NULL;
