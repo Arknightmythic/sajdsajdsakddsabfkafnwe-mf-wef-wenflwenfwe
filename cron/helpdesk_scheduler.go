@@ -27,7 +27,6 @@ func (h *HelpdeskScheduler) UpdateQueuedToPending() {
 		log.Printf("Using default period: %d minutes", period)
 	}
 
-	// threshold := time.Now().Add(-time.Duration(period) * time.Minute)
 	threshold := time.Now().UTC().Add(-time.Duration(period) * time.Minute)
 	query := `
 		UPDATE bkpm.helpdesk

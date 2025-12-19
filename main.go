@@ -102,7 +102,6 @@ func main() {
 
 	log.Println("Shutting down server...")
 
-	// Stop scheduler first
 	scheduler.Stop()
 
 	if asyncProcessor != nil {

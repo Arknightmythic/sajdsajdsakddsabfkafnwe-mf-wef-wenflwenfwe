@@ -526,10 +526,6 @@ func (r *ChatRepository) shouldIncludePair(pair ChatPair, filter ChatHistoryFilt
 	return true
 }
 
-// ==================================================================================
-// HELPER FUNCTIONS (Tambahkan di bawah shouldIncludePair)
-// ==================================================================================
-
 func (r *ChatRepository) matchValidatedFilter(pair ChatPair, filterVal *string) bool {
 	if filterVal == nil {
 		return true
