@@ -633,14 +633,23 @@ func (r *DocumentRepository) BatchRequestDelete(ids []int) error {
 }
 
 func (r *DocumentRepository) RestoreStatus(id int) error {
-	query := `
-		UPDATE document_details
-		SET 
-			status = 'Approved',
-			request_type = NULL,
-			requested_at = NULL
-		WHERE id = $1
-	`
-	_, err := r.db.Exec(query, id)
-	return err
+    // FIX: Menggunakan logika CASE untuk menentukan apakah NEW atau UPDATE
+    // dan mengembalikan requested_at dari created_at
+    query := `
+        UPDATE document_details dd
+        SET 
+            status = 'Approved',
+            request_type = CASE 
+                WHEN NOT EXISTS (
+                    SELECT 1 FROM document_details d2 
+                    WHERE d2.document_id = dd.document_id 
+                    AND d2.id < dd.id
+                ) THEN 'NEW'
+                ELSE 'UPDATE'
+            END,
+            requested_at = dd.created_at
+        WHERE dd.id = $1
+    `
+    _, err := r.db.Exec(query, id)
+    return err
 }
