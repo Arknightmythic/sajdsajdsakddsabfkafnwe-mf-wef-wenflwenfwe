@@ -37,7 +37,8 @@ func (r *GuideRepository) GetAll(filter GuideFilter) ([]Guide, int, error) {
 	argIdx := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d)", argIdx, argIdx))
+		placeholder := "$" + fmt.Sprint(argIdx)
+		conditions = append(conditions, "(title ILIKE "+placeholder+" OR description ILIKE "+placeholder+")")
 		args = append(args, "%"+filter.Search+"%")
 		argIdx++
 	}
@@ -47,30 +48,32 @@ func (r *GuideRepository) GetAll(filter GuideFilter) ([]Guide, int, error) {
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM guides %s", where)
+	countQuery := "SELECT COUNT(*) FROM guides " + where
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
+	// Validate sort column
 	allowedSort := map[string]bool{"created_at": true, "title": true, "updated_at": true}
 	sortBy := "created_at"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
+	// Validate sort direction
 	sortDirection := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		sortDirection = "ASC"
 	}
 
-	query := fmt.Sprintf(`
-		SELECT id, title, description, filename, original_filename, created_at, updated_at
-		FROM guides
-		%s
-		ORDER BY %s %s
-		LIMIT $%d OFFSET $%d
-	`, where, sortBy, sortDirection, argIdx, argIdx+1)
+	limitPlaceholder := "$" + fmt.Sprint(argIdx)
+	offsetPlaceholder := "$" + fmt.Sprint(argIdx+1)
+
+	query := `SELECT id, title, description, filename, original_filename, created_at, updated_at
+		FROM guides ` + where + `
+		ORDER BY ` + sortBy + ` ` + sortDirection + `
+		LIMIT ` + limitPlaceholder + ` OFFSET ` + offsetPlaceholder
 
 	args = append(args, filter.Limit, filter.Offset)
 
@@ -83,7 +86,7 @@ func (r *GuideRepository) GetAll(filter GuideFilter) ([]Guide, int, error) {
 
 func (r *GuideRepository) GetByID(id int) (*Guide, error) {
 	var guide Guide
-	query := `SELECT * FROM guides WHERE id = $1`
+	query := `SELECT id, title, description, filename, original_filename, created_at, updated_at FROM guides WHERE id = $1`
 	err := r.db.Get(&guide, query, id)
 	if err != nil {
 		return nil, err

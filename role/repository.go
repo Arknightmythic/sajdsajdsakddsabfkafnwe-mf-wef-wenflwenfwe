@@ -24,7 +24,7 @@ func (r *RoleRepository) Create(role Role) error {
 
 func (r *RoleRepository) GetRoleByTeamID(teamID int) ([]Role, error) {
 	var roles []Role
-	err := r.db.Select(&roles, "SELECT * FROM roles WHERE team_id=$1", teamID)
+	err := r.db.Select(&roles, "SELECT id, name, permissions, team_id FROM roles WHERE team_id = $1", teamID)
 	return roles, err
 }
 
@@ -34,28 +34,32 @@ func (r *RoleRepository) GetAll(limit, offset int, search string, teamID *int) (
 	argCount := 1
 
 	query := `
-		SELECT DISTINCT r.* 
+		SELECT DISTINCT r.id, r.name, r.permissions, r.team_id
 		FROM roles r
 		LEFT JOIN permissions p ON p.id::text = ANY(r.permissions)
 		WHERE 1=1
 	`
 
 	if search != "" {
-		query += fmt.Sprintf(` AND (
-			r.name ILIKE $%d OR 
-			p.name ILIKE $%d
-		)`, argCount, argCount)
+		placeholder := "$" + fmt.Sprint(argCount)
+		query += ` AND (
+			r.name ILIKE ` + placeholder + ` OR 
+			p.name ILIKE ` + placeholder + `
+		)`
 		args = append(args, "%"+search+"%")
 		argCount++
 	}
 
 	if teamID != nil {
-		query += fmt.Sprintf(` AND r.team_id = $%d`, argCount)
+		query += ` AND r.team_id = $` + fmt.Sprint(argCount)
 		args = append(args, *teamID)
 		argCount++
 	}
 
-	query += fmt.Sprintf(` ORDER BY r.id LIMIT $%d OFFSET $%d`, argCount, argCount+1)
+	limitPlaceholder := "$" + fmt.Sprint(argCount)
+	offsetPlaceholder := "$" + fmt.Sprint(argCount+1)
+	query += ` ORDER BY r.id LIMIT ` + limitPlaceholder + ` OFFSET ` + offsetPlaceholder
+
 	args = append(args, limit, offset)
 
 	err := r.db.Select(&roles, query, args...)
@@ -75,16 +79,17 @@ func (r *RoleRepository) GetTotal(search string, teamID *int) (int, error) {
 	`
 
 	if search != "" {
-		query += fmt.Sprintf(` AND (
-			r.name ILIKE $%d OR 
-			p.name ILIKE $%d
-		)`, argCount, argCount)
+		placeholder := "$" + fmt.Sprint(argCount)
+		query += ` AND (
+			r.name ILIKE ` + placeholder + ` OR 
+			p.name ILIKE ` + placeholder + `
+		)`
 		args = append(args, "%"+search+"%")
 		argCount++
 	}
 
 	if teamID != nil {
-		query += fmt.Sprintf(` AND r.team_id = $%d`, argCount)
+		query += ` AND r.team_id = $` + fmt.Sprint(argCount)
 		args = append(args, *teamID)
 		argCount++
 	}
@@ -95,7 +100,7 @@ func (r *RoleRepository) GetTotal(search string, teamID *int) (int, error) {
 
 func (r *RoleRepository) GetByID(id int) (*Role, error) {
 	var role Role
-	err := r.db.Get(&role, "SELECT * FROM roles WHERE id=$1", id)
+	err := r.db.Get(&role, "SELECT id, name, permissions, team_id FROM roles WHERE id = $1", id)
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +110,13 @@ func (r *RoleRepository) GetByID(id int) (*Role, error) {
 func (r *RoleRepository) Update(id int, role Role) error {
 	_, err := r.db.Exec(`
 		UPDATE roles 
-		SET name=$1, permissions=$2, team_id=$3
-		WHERE id=$4
+		SET name = $1, permissions = $2, team_id = $3
+		WHERE id = $4
 	`, role.Name, role.Permissions, role.TeamID, id)
 	return err
 }
 
 func (r *RoleRepository) Delete(id int) error {
-	_, err := r.db.Exec("DELETE FROM roles WHERE id=$1", id)
+	_, err := r.db.Exec("DELETE FROM roles WHERE id = $1", id)
 	return err
 }

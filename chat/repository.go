@@ -51,17 +51,14 @@ func (r *ChatRepository) CreateChatHistory(history *ChatHistory) error {
 func (r *ChatRepository) GetAllChatHistory(filter ChatHistoryFilter) ([]ChatHistory, int, error) {
 	var conditions []string
 	var args []interface{}
-	argIdx := 1
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argIdx))
+		conditions = append(conditions, "created_at >= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.StartDate)
-		argIdx++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", argIdx))
+		conditions = append(conditions, "created_at <= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.EndDate)
-		argIdx++
 	}
 
 	where := ""
@@ -69,18 +66,20 @@ func (r *ChatRepository) GetAllChatHistory(filter ChatHistoryFilter) ([]ChatHist
 		where = isWHERE + strings.Join(conditions, " AND ")
 	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM chat_history %s", where)
+	countQuery := "SELECT COUNT(*) FROM chat_history " + where
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
+	// Validate sort column
 	allowedSort := map[string]bool{"created_at": true, "user_id": true, "id": true, "session_id": true}
 	sortBy := "created_at"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
+	// Validate sort direction
 	sortDirection := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		sortDirection = "ASC"
@@ -93,13 +92,14 @@ func (r *ChatRepository) GetAllChatHistory(filter ChatHistoryFilter) ([]ChatHist
 		filter.Offset = 0
 	}
 
-	query := fmt.Sprintf(`
-		 SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+	limitPlaceholder := "$" + fmt.Sprint(len(args)+1)
+	offsetPlaceholder := "$" + fmt.Sprint(len(args)+2)
+
+	query := `SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
 			 category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
-		 FROM chat_history %s
-		 ORDER BY %s %s
-		 LIMIT $%d OFFSET $%d
-	`, where, sortBy, sortDirection, argIdx, argIdx+1)
+		 FROM chat_history ` + where + `
+		 ORDER BY ` + sortBy + ` ` + sortDirection + `
+		 LIMIT ` + limitPlaceholder + ` OFFSET ` + offsetPlaceholder
 
 	args = append(args, filter.Limit, filter.Offset)
 
@@ -129,37 +129,35 @@ func (r *ChatRepository) GetChatHistoryByID(id int) (*ChatHistory, error) {
 func (r *ChatRepository) GetChatHistoryBySessionID(sessionID uuid.UUID, filter ChatHistoryFilter) ([]ChatHistory, int, error) {
 	var conditions []string
 	var args []interface{}
-	argIdx := 1
 
-	conditions = append(conditions, fmt.Sprintf("session_id = $%d", argIdx))
+	conditions = append(conditions, "session_id = $1")
 	args = append(args, sessionID)
-	argIdx++
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argIdx))
+		conditions = append(conditions, "created_at >= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.StartDate)
-		argIdx++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("created_at <= $%d", argIdx))
+		conditions = append(conditions, "created_at <= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.EndDate)
-		argIdx++
 	}
 
 	where := isWHERE + strings.Join(conditions, " AND ")
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM chat_history %s", where)
+	countQuery := "SELECT COUNT(*) FROM chat_history " + where
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
+	// Validate sort column
 	allowedSort := map[string]bool{"created_at": true, "user_id": true, "id": true}
 	sortBy := "created_at"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
+	// Validate sort direction
 	sortDirection := "ASC"
 	if strings.ToUpper(filter.SortDirection) == "DESC" {
 		sortDirection = "DESC"
@@ -172,14 +170,14 @@ func (r *ChatRepository) GetChatHistoryBySessionID(sessionID uuid.UUID, filter C
 		filter.Offset = 0
 	}
 
-	query := fmt.Sprintf(`
-		 SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
+	limitPlaceholder := "$" + fmt.Sprint(len(args)+1)
+	offsetPlaceholder := "$" + fmt.Sprint(len(args)+2)
+
+	query := `SELECT id, session_id, message, created_at, user_id, is_cannot_answer,
 			 category, feedback, question_category, question_sub_category, is_answered, revision, is_validated
-		 FROM chat_history
-		 %s
-		 ORDER BY %s %s
-		 LIMIT $%d OFFSET $%d
-	`, where, sortBy, sortDirection, argIdx, argIdx+1)
+		 FROM chat_history ` + where + `
+		 ORDER BY ` + sortBy + ` ` + sortDirection + `
+		 LIMIT ` + limitPlaceholder + ` OFFSET ` + offsetPlaceholder
 
 	args = append(args, filter.Limit, filter.Offset)
 
@@ -244,41 +242,39 @@ func (r *ChatRepository) CreateConversation(conv *Conversation) error {
 func (r *ChatRepository) GetAllConversations(filter ConversationFilter) ([]Conversation, int, error) {
 	var conditions []string
 	var args []interface{}
-	argIdx := 1
 
 	conditions = append(conditions, "platform = 'web'")
 
 	if filter.PlatformUniqueID != nil {
-		conditions = append(conditions, fmt.Sprintf("platform_unique_id = $%d", argIdx))
+		conditions = append(conditions, "platform_unique_id = $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.PlatformUniqueID)
-		argIdx++
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("start_timestamp >= $%d", argIdx))
+		conditions = append(conditions, "start_timestamp >= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.StartDate)
-		argIdx++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("start_timestamp <= $%d", argIdx))
+		conditions = append(conditions, "start_timestamp <= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.EndDate)
-		argIdx++
 	}
 
 	where := isWHERE + strings.Join(conditions, " AND ")
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM conversations %s", where)
+	countQuery := "SELECT COUNT(*) FROM conversations " + where
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
+	// Validate sort column
 	allowedSort := map[string]bool{"start_timestamp": true, "end_timestamp": true, "id": true}
 	sortBy := "start_timestamp"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
+	// Validate sort direction
 	sortDirection := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		sortDirection = "ASC"
@@ -291,14 +287,14 @@ func (r *ChatRepository) GetAllConversations(filter ConversationFilter) ([]Conve
 		filter.Offset = 0
 	}
 
-	query := fmt.Sprintf(`
-		SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, 
+	limitPlaceholder := "$" + fmt.Sprint(len(args)+1)
+	offsetPlaceholder := "$" + fmt.Sprint(len(args)+2)
+
+	query := `SELECT id, start_timestamp, end_timestamp, platform, platform_unique_id, is_helpdesk, 
 			   COALESCE(context, '') as context
-		FROM conversations
-		%s
-		ORDER BY %s %s
-		LIMIT $%d OFFSET $%d
-	`, where, sortBy, sortDirection, argIdx, argIdx+1)
+		FROM conversations ` + where + `
+		ORDER BY ` + sortBy + ` ` + sortDirection + `
+		LIMIT ` + limitPlaceholder + ` OFFSET ` + offsetPlaceholder
 
 	args = append(args, filter.Limit, filter.Offset)
 
@@ -409,36 +405,32 @@ func (r *ChatRepository) fetchRawHistories(sessionID *uuid.UUID, filter ChatHist
 	var histories []chatHistoryWithPlatform
 	var conditions []string
 	var args []interface{}
-	argIdx := 1
 
 	if sessionID != nil {
-		conditions = append(conditions, fmt.Sprintf("ch.session_id = $%d", argIdx))
+		conditions = append(conditions, "ch.session_id = $"+fmt.Sprint(len(args)+1))
 		args = append(args, *sessionID)
-		argIdx++
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf("ch.created_at >= $%d", argIdx))
+		conditions = append(conditions, "ch.created_at >= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.StartDate)
-		argIdx++
 	}
 
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf("ch.created_at <= $%d", argIdx))
+		conditions = append(conditions, "ch.created_at <= $"+fmt.Sprint(len(args)+1))
 		args = append(args, *filter.EndDate)
-		argIdx++
 	}
 
 	if filter.Search != "" {
 		searchPattern := "%" + filter.Search + "%"
-		conditions = append(conditions, fmt.Sprintf(`(
-            c.platform_unique_id ILIKE $%d OR 
-            ch.session_id::text ILIKE $%d OR 
-            ch.message ->> 'content' ILIKE $%d OR 
-            ch.message -> 'data' ->> 'content' ILIKE $%d
-        )`, argIdx, argIdx, argIdx, argIdx))
+		placeholder := "$" + fmt.Sprint(len(args)+1)
+		conditions = append(conditions, `(
+            c.platform_unique_id ILIKE `+placeholder+` OR 
+            ch.session_id::text ILIKE `+placeholder+` OR 
+            ch.message ->> 'content' ILIKE `+placeholder+` OR 
+            ch.message -> 'data' ->> 'content' ILIKE `+placeholder+`
+        )`)
 		args = append(args, searchPattern)
-		argIdx++
 	}
 
 	conditions = append(conditions, "c.is_helpdesk = false")
@@ -448,16 +440,13 @@ func (r *ChatRepository) fetchRawHistories(sessionID *uuid.UUID, filter ChatHist
 		where = isWHERE + strings.Join(conditions, " AND ")
 	}
 
-	query := fmt.Sprintf(`
-		SELECT ch.id, ch.session_id, ch.message, ch.created_at, ch.user_id, ch.is_cannot_answer,
+	query := `SELECT ch.id, ch.session_id, ch.message, ch.created_at, ch.user_id, ch.is_cannot_answer,
 			ch.category, ch.feedback, ch.question_category, ch.question_sub_category, ch.is_answered, 
 			ch.revision, ch.is_validated, 
 			c.platform_unique_id
 		FROM chat_history ch 
-		JOIN conversations c ON ch.session_id = c.id
-		%s
-		ORDER BY ch.session_id ASC, ch.created_at ASC, ch.id ASC
-	`, where)
+		JOIN conversations c ON ch.session_id = c.id ` + where + `
+		ORDER BY ch.session_id ASC, ch.created_at ASC, ch.id ASC`
 
 	if err := r.db.Select(&histories, query, args...); err != nil {
 		return nil, err
