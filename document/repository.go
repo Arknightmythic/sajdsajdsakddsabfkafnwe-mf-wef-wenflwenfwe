@@ -8,18 +8,6 @@ import (
 	"github.com/lib/pq"
 )
 
-const (
-	isQuerySearch            = "(dd.document_name ILIKE $%d OR dd.staff ILIKE $%d OR dd.team ILIKE $%d)"
-	isFilterDataType         = "dd.data_type = $%d"
-	isFilterCategoryType     = "d.category = $%d"
-	isFilterStatusType       = "dd.status = $%d"
-	isFilterCreateAt         = "dd.created_at >= $%d"
-	isFilterRequestedAtStart = "dd.requested_at >= $%d"
-	isFilterRequestedAtEnd   = "dd.requested_at <= $%d"
-	isFilterEndAt            = "dd.created_at <= $%d"
-	isQueryCreatedAt         = "dd.created_at"
-)
-
 type DocumentRepository struct {
 	db *sqlx.DB
 }
@@ -92,7 +80,11 @@ func (r *DocumentRepository) GetAllDocuments(filter DocumentFilter) ([]DocumentW
 	}
 	query += r.buildSortClause(filter)
 	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
-	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+
+	limitPlaceholder := "$" + fmt.Sprint(argIndex)
+	offsetPlaceholder := "$" + fmt.Sprint(argIndex+1)
+	query += " LIMIT " + limitPlaceholder + " OFFSET " + offsetPlaceholder
+
 	args = append(args, limit, offset)
 
 	var documents []DocumentWithDetail
@@ -109,25 +101,26 @@ func (r *DocumentRepository) buildDocumentFilters(filter DocumentFilter) ([]stri
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
+		placeholder := "$" + fmt.Sprint(argIndex)
+		conditions = append(conditions, "(dd.document_name ILIKE "+placeholder+" OR dd.staff ILIKE "+placeholder+" OR dd.team ILIKE "+placeholder+")")
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
+		conditions = append(conditions, "dd.data_type = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
+		conditions = append(conditions, "d.category = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
+		conditions = append(conditions, "dd.status = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
@@ -136,19 +129,19 @@ func (r *DocumentRepository) buildDocumentFilters(filter DocumentFilter) ([]stri
 		if filter.IngestStatus == "null" {
 			conditions = append(conditions, "dd.ingest_status IS NULL")
 		} else {
-			conditions = append(conditions, fmt.Sprintf("dd.ingest_status = $%d", argIndex))
+			conditions = append(conditions, "dd.ingest_status = $"+fmt.Sprint(argIndex))
 			args = append(args, filter.IngestStatus)
 			argIndex++
 		}
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
+		conditions = append(conditions, "dd.created_at >= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
+		conditions = append(conditions, "dd.created_at <= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -157,8 +150,8 @@ func (r *DocumentRepository) buildDocumentFilters(filter DocumentFilter) ([]stri
 }
 
 func (r *DocumentRepository) buildSortClause(filter DocumentFilter) string {
-	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true}
-	sortBy := isQueryCreatedAt
+	allowedSort := map[string]bool{"dd.created_at": true, "dd.document_name": true, "dd.staff": true}
+	sortBy := "dd.created_at"
 
 	if filter.SortBy != "" {
 		sb := filter.SortBy
@@ -174,7 +167,7 @@ func (r *DocumentRepository) buildSortClause(filter DocumentFilter) string {
 		dir = "ASC"
 	}
 
-	return fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
+	return " ORDER BY " + sortBy + " " + dir
 }
 
 func (r *DocumentRepository) ensurePagination(limit, offset int) (int, int) {
@@ -200,25 +193,26 @@ func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, erro
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
+		placeholder := "$" + fmt.Sprint(argIndex)
+		conditions = append(conditions, "(dd.document_name ILIKE "+placeholder+" OR dd.staff ILIKE "+placeholder+" OR dd.team ILIKE "+placeholder+")")
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
+		conditions = append(conditions, "dd.data_type = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
+		conditions = append(conditions, "d.category = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
+		conditions = append(conditions, "dd.status = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
@@ -227,19 +221,19 @@ func (r *DocumentRepository) GetTotalDocuments(filter DocumentFilter) (int, erro
 		if filter.IngestStatus == "null" {
 			conditions = append(conditions, "dd.ingest_status IS NULL")
 		} else {
-			conditions = append(conditions, fmt.Sprintf("dd.ingest_status = $%d", argIndex))
+			conditions = append(conditions, "dd.ingest_status = $"+fmt.Sprint(argIndex))
 			args = append(args, filter.IngestStatus)
 			argIndex++
 		}
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
+		conditions = append(conditions, "dd.created_at >= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
+		conditions = append(conditions, "dd.created_at <= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -299,7 +293,7 @@ func (r *DocumentRepository) GetDocumentDetailByID(id int) (*DocumentDetail, err
 		SELECT 
 			id, document_id, document_name, filename, data_type, staff, team, 
 			status, is_latest, is_approve, created_at, ingest_status,
-			request_type, requested_at  -- NEW
+			request_type, requested_at
 		FROM document_details
 		WHERE id = $1
 	`
@@ -350,7 +344,11 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 	}
 	query += r.buildDetailSortClause(filter)
 	limit, offset := r.ensurePagination(filter.Limit, filter.Offset)
-	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+
+	limitPlaceholder := "$" + fmt.Sprint(argIndex)
+	offsetPlaceholder := "$" + fmt.Sprint(argIndex+1)
+	query += " LIMIT " + limitPlaceholder + " OFFSET " + offsetPlaceholder
+
 	args = append(args, limit, offset)
 
 	var details []DocumentDetail
@@ -367,48 +365,49 @@ func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFil
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
+		placeholder := "$" + fmt.Sprint(argIndex)
+		conditions = append(conditions, "(dd.document_name ILIKE "+placeholder+" OR dd.staff ILIKE "+placeholder+" OR dd.team ILIKE "+placeholder+")")
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.RequestType != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.request_type = $%d", argIndex))
+		conditions = append(conditions, "dd.request_type = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.RequestType)
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
+		conditions = append(conditions, "dd.data_type = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
+		conditions = append(conditions, "d.category = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
+		conditions = append(conditions, "dd.status = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
 
 	if filter.DocumentName != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.document_name ILIKE $%d", argIndex))
+		conditions = append(conditions, "dd.document_name ILIKE $"+fmt.Sprint(argIndex))
 		args = append(args, "%"+filter.DocumentName+"%")
 		argIndex++
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterRequestedAtStart, argIndex))
+		conditions = append(conditions, "dd.requested_at >= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterRequestedAtEnd, argIndex))
+		conditions = append(conditions, "dd.requested_at <= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -417,8 +416,8 @@ func (r *DocumentRepository) buildDocumentDetailFilters(filter DocumentDetailFil
 }
 
 func (r *DocumentRepository) buildDetailSortClause(filter DocumentDetailFilter) string {
-	allowedSort := map[string]bool{isQueryCreatedAt: true, "dd.document_name": true, "dd.staff": true, "dd.request_type": true}
-	sortBy := isQueryCreatedAt
+	allowedSort := map[string]bool{"dd.created_at": true, "dd.document_name": true, "dd.staff": true, "dd.request_type": true}
+	sortBy := "dd.created_at"
 
 	if filter.SortBy != "" {
 		sb := filter.SortBy
@@ -434,7 +433,7 @@ func (r *DocumentRepository) buildDetailSortClause(filter DocumentDetailFilter) 
 		dir = "ASC"
 	}
 
-	return fmt.Sprintf(" ORDER BY %s %s", sortBy, dir)
+	return " ORDER BY " + sortBy + " " + dir
 }
 
 func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter) (int, error) {
@@ -450,42 +449,43 @@ func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter
 	argIndex := 1
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf(isQuerySearch, argIndex, argIndex, argIndex))
+		placeholder := "$" + fmt.Sprint(argIndex)
+		conditions = append(conditions, "(dd.document_name ILIKE "+placeholder+" OR dd.staff ILIKE "+placeholder+" OR dd.team ILIKE "+placeholder+")")
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
 
 	if filter.DataType != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterDataType, argIndex))
+		conditions = append(conditions, "dd.data_type = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.DataType)
 		argIndex++
 	}
 
 	if filter.Category != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterCategoryType, argIndex))
+		conditions = append(conditions, "d.category = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Category)
 		argIndex++
 	}
 
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf(isFilterStatusType, argIndex))
+		conditions = append(conditions, "dd.status = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
 
 	if filter.DocumentName != "" {
-		conditions = append(conditions, fmt.Sprintf("dd.document_name ILIKE $%d", argIndex))
+		conditions = append(conditions, "dd.document_name ILIKE $"+fmt.Sprint(argIndex))
 		args = append(args, "%"+filter.DocumentName+"%")
 		argIndex++
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterCreateAt, argIndex))
+		conditions = append(conditions, "dd.created_at >= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, fmt.Sprintf(isFilterEndAt, argIndex))
+		conditions = append(conditions, "dd.created_at <= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
@@ -606,6 +606,7 @@ func (r *DocumentRepository) CheckExistingDocuments(names []string) ([]string, e
 
 	return duplicates, nil
 }
+
 func (r *DocumentRepository) RequestDelete(id int) error {
 	query := `
 		UPDATE document_details
@@ -633,23 +634,21 @@ func (r *DocumentRepository) BatchRequestDelete(ids []int) error {
 }
 
 func (r *DocumentRepository) RestoreStatus(id int) error {
-    // FIX: Menggunakan logika CASE untuk menentukan apakah NEW atau UPDATE
-    // dan mengembalikan requested_at dari created_at
-    query := `
-        UPDATE document_details dd
-        SET 
-            status = 'Approved',
-            request_type = CASE 
-                WHEN NOT EXISTS (
-                    SELECT 1 FROM document_details d2 
-                    WHERE d2.document_id = dd.document_id 
-                    AND d2.id < dd.id
-                ) THEN 'NEW'
-                ELSE 'UPDATE'
-            END,
-            requested_at = dd.created_at
-        WHERE dd.id = $1
-    `
-    _, err := r.db.Exec(query, id)
-    return err
+	query := `
+		UPDATE document_details dd
+		SET 
+			status = 'Approved',
+			request_type = CASE 
+				WHEN NOT EXISTS (
+					SELECT 1 FROM document_details d2 
+					WHERE d2.document_id = dd.document_id 
+					AND d2.id < dd.id
+				) THEN 'NEW'
+				ELSE 'UPDATE'
+			END,
+			requested_at = dd.created_at
+		WHERE dd.id = $1
+	`
+	_, err := r.db.Exec(query, id)
+	return err
 }

@@ -25,7 +25,6 @@ func (r *HelpdeskRepository) GetSwitchStatus() (*SwitchHelpdesk, error) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-
 			insertQuery := `INSERT INTO switch_helpdesk (status) VALUES (false) RETURNING id, status`
 			err = r.db.QueryRowx(insertQuery).StructScan(&sh)
 			if err != nil {
@@ -40,7 +39,6 @@ func (r *HelpdeskRepository) GetSwitchStatus() (*SwitchHelpdesk, error) {
 }
 
 func (r *HelpdeskRepository) UpdateSwitchStatus(status bool) (*SwitchHelpdesk, error) {
-
 	_, err := r.GetSwitchStatus()
 	if err != nil {
 		return nil, err
@@ -79,14 +77,14 @@ func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status str
 			  FROM helpdesk`
 
 	if search != "" {
-
-		conditions = append(conditions, fmt.Sprintf("(platform ILIKE $%d OR platform_unique_id ILIKE $%d OR session_id::text ILIKE $%d)", argIdx, argIdx, argIdx))
+		placeholder := "$" + fmt.Sprint(argIdx)
+		conditions = append(conditions, "(platform ILIKE "+placeholder+" OR platform_unique_id ILIKE "+placeholder+" OR session_id::text ILIKE "+placeholder+")")
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
 
 	if status != "" {
-		conditions = append(conditions, fmt.Sprintf("status ILIKE $%d", argIdx))
+		conditions = append(conditions, "status ILIKE $"+fmt.Sprint(argIdx))
 		args = append(args, status)
 		argIdx++
 	}
@@ -96,7 +94,7 @@ func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status str
 		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM helpdesk %s", where)
+	countQuery := "SELECT COUNT(*) FROM helpdesk" + where
 	var total int
 	if err := r.db.Get(&total, countQuery, args...); err != nil {
 		return []Helpdesk{}, 0, err
@@ -106,7 +104,10 @@ func (r *HelpdeskRepository) GetAll(limit, offset int, search string, status str
 		return []Helpdesk{}, 0, nil
 	}
 
-	fullQuery := fmt.Sprintf("%s %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", query, where, argIdx, argIdx+1)
+	limitPlaceholder := "$" + fmt.Sprint(argIdx)
+	offsetPlaceholder := "$" + fmt.Sprint(argIdx+1)
+
+	fullQuery := query + where + " ORDER BY created_at DESC LIMIT " + limitPlaceholder + " OFFSET " + offsetPlaceholder
 	args = append(args, limit, offset)
 
 	if err := r.db.Select(&helpdesks, fullQuery, args...); err != nil {
@@ -150,13 +151,12 @@ func (r *HelpdeskRepository) Update(helpdesk *Helpdesk) error {
 }
 
 func (r *HelpdeskRepository) UpdateStatus(id int, status string, userID any) error {
-	var query string
 	if status == "in_progress" && userID != nil {
-		query += `UPDATE helpdesk SET status = $1, user_id = $2 WHERE id = $3`
+		query := `UPDATE helpdesk SET status = $1, user_id = $2 WHERE id = $3`
 		_, err := r.db.Exec(query, status, userID, id)
 		return err
 	} else {
-		query = `UPDATE helpdesk SET status = $1 WHERE id = $2`
+		query := `UPDATE helpdesk SET status = $1 WHERE id = $2`
 		_, err := r.db.Exec(query, status, id)
 		return err
 	}
