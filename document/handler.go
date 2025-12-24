@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	urlViewFile             = "%s/api/documents/view-file?token=%s"
+	urlViewFileBase = "%s/api/documents/view-file"
 	successViewResponse     = "View URL generated successfully"
 	emailNotFoundResponse   = "User email not found"
 	accountNotFoundResponse = "Account type not found"
 	failedParseFormResponse = "Failed to parse multipart form"
+	viewTokenCookieName = "document_view_token"
 )
 
 type FileUploadConfig struct {
@@ -52,113 +53,164 @@ func NewDocumentHandler(service *DocumentService, redisClient *redis.Client) *Do
 }
 
 func (h *DocumentHandler) GenerateViewURL(ctx *gin.Context) {
-	var req struct {
-		Filename string `json:"filename" binding:"required"`
-	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Filename is required")
-		return
-	}
+    var req struct {
+        Filename string `json:"filename" binding:"required"`
+    }
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        util.ErrorResponse(ctx, http.StatusBadRequest, "Filename is required")
+        return
+    }
 
-	token, err := h.service.GenerateViewToken(req.Filename)
-	if err != nil {
-		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-		return
-	}
+    token, err := h.service.GenerateViewToken(req.Filename)
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+        return
+    }
 
-	baseURL := "https://" + ctx.Request.Host
-	viewURL := fmt.Sprintf(urlViewFile, baseURL, token)
+    // [PERBAIKAN] Logika penentuan Secure yang bersih
+    // 1. Deteksi otomatis
+    isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
+    
+    // 2. Override jika ENV diset
+    if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
+        isSecure = envSecure == "true"
+    }
 
-	util.SuccessResponse(ctx, successViewResponse, gin.H{
-		"url": viewURL,
-	})
+    // Ambil konfigurasi Env
+    httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
+    domain := os.Getenv("COOKIE_DOMAIN")
+    path := "/api/documents/view-file"
+
+    // Set SameSite
+    sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+    ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
+
+    // Set Cookie
+    ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+
+    // Generate Clean URL
+    scheme := "https"
+    if isSecure {
+        scheme = "https"
+    }
+    baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+    viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+
+    util.SuccessResponse(ctx, successViewResponse, gin.H{
+        "url": viewURL,
+    })
 }
 
 func (h *DocumentHandler) GenerateViewURLByID(ctx *gin.Context) {
-	var req struct {
-		ID int `json:"id" binding:"required"`
-	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Document ID is required")
-		return
-	}
+    var req struct {
+        ID int `json:"id" binding:"required"`
+    }
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        util.ErrorResponse(ctx, http.StatusBadRequest, "Document ID is required")
+        return
+    }
 
-	token, err := h.service.GenerateViewTokenByID(req.ID)
-	if err != nil {
-		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-		return
-	}
+    token, err := h.service.GenerateViewTokenByID(req.ID)
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+        return
+    }
 
-	scheme := "https"
-	if ctx.Request.TLS != nil {
-		scheme = "https"
-	}
-	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+    // [PERBAIKAN] Logika Secure
+    isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
+    if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
+        isSecure = envSecure == "true"
+    }
 
-	viewURL := fmt.Sprintf(urlViewFile, baseURL, token)
+    httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
+    domain := os.Getenv("COOKIE_DOMAIN")
+    path := "/api/documents/view-file"
 
-	util.SuccessResponse(ctx, successViewResponse, gin.H{
-		"url": viewURL,
-	})
+    sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+    ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
+    
+    ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+
+    scheme := "https"
+    if isSecure {
+        scheme = "https"
+    }
+    baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+    viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+
+    util.SuccessResponse(ctx, successViewResponse, gin.H{
+        "url": viewURL,
+    })
 }
 
 func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
-	token := ctx.Query("token")
-	if token == "" {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Token is required")
-		return
-	}
+    token, err := ctx.Cookie(viewTokenCookieName)
+    if err != nil || token == "" {
+        util.ErrorResponse(ctx, http.StatusUnauthorized, "Missing access token (cookie required)")
+        return
+    }
 
-	key := "view_token:" + token
-	ctxRedis := context.Background()
+    // Ambil konfigurasi Path & Domain agar DELETE berhasil
+    // Browser butuh path & domain yang SAMA PERSIS untuk menghapus cookie
+    domain := os.Getenv("COOKIE_DOMAIN")
+    path := "/api/documents/view-file"
 
-	filename, err := h.redis.Get(ctxRedis, key).Result()
-	if err == redis.Nil {
-		util.ErrorResponse(ctx, http.StatusUnauthorized, "Invalid or expired token")
-		return
-	}
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to validate token with GET: %v", err)
-		util.ErrorResponse(ctx, http.StatusInternalServerError, errorMsg)
-		return
-	}
+    // Hapus cookie (MaxAge -1)
+    // Parameter Secure & HttpOnly saat delete tidak terlalu kritikal, tapi sebaiknya disamakan
+    ctx.SetCookie(viewTokenCookieName, "", -1, path, domain, false, true)
 
-	h.redis.Del(ctxRedis, key)
+    // ... (Lanjutan logika validasi Redis & Serve File tetap sama) ...
+    key := "view_token:" + token
+    ctxRedis := context.Background()
 
-	filePath := config.GetDocumentPath(filename)
+    filename, err := h.redis.Get(ctxRedis, key).Result()
+    if err == redis.Nil {
+        util.ErrorResponse(ctx, http.StatusUnauthorized, "Invalid or expired token")
+        return
+    }
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		util.ErrorResponse(ctx, http.StatusNotFound, "File not found")
-		return
-	}
+    if err != nil {
+        errorMsg := fmt.Sprintf("Failed to validate token with GET: %v", err)
+        util.ErrorResponse(ctx, http.StatusInternalServerError, errorMsg)
+        return
+    }
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to open file")
-		return
-	}
-	defer file.Close()
+    h.redis.Del(ctxRedis, key)
 
-	fileInfo, err := file.Stat()
-	if err != nil {
-		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to get file info")
-		return
-	}
+    filePath := config.GetDocumentPath(filename)
+    // ... (sisanya sama dengan kode Anda) ...
+    if _, err := os.Stat(filePath); os.IsNotExist(err) {
+        util.ErrorResponse(ctx, http.StatusNotFound, "File not found")
+        return
+    }
+    
+    file, err := os.Open(filePath)
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to open file")
+        return
+    }
+    defer file.Close()
 
-	ext := strings.ToLower(filepath.Ext(filename))
-	contentType := "application/octet-stream"
-	if ext == ".pdf" {
-		contentType = "application/pdf"
-	} else if ext == ".txt" {
-		contentType = "text/plain"
-	}
+    fileInfo, err := file.Stat()
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to get file info")
+        return
+    }
 
-	ctx.Header("Content-Description", "File View")
-	ctx.Header("Content-Type", contentType)
-	ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
-	ctx.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
+    ext := strings.ToLower(filepath.Ext(filename))
+    contentType := "application/octet-stream"
+    if ext == ".pdf" {
+        contentType = "application/pdf"
+    } else if ext == ".txt" {
+        contentType = "text/plain"
+    }
 
-	io.Copy(ctx.Writer, file)
+    ctx.Header("Content-Description", "File View")
+    ctx.Header("Content-Type", contentType)
+    ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+    ctx.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
+
+    io.Copy(ctx.Writer, file)
 }
 
 func (h *DocumentHandler) getTeamNameForUser(ctx *gin.Context) string {
@@ -774,31 +826,56 @@ func (h *DocumentHandler) BatchDeleteDocument(c *gin.Context) {
 }
 
 func (h *DocumentHandler) GenerateViewURLByDocumentID(ctx *gin.Context) {
-	var req struct {
-		DocumentID int `json:"document_id" binding:"required"`
-	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "document_id is required")
-		return
-	}
+    var req struct {
+        DocumentID int `json:"document_id" binding:"required"`
+    }
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        util.ErrorResponse(ctx, http.StatusBadRequest, "document_id is required")
+        return
+    }
 
-	token, err := h.service.GenerateViewTokenByDocumentID(req.DocumentID)
-	if err != nil {
-		util.ErrorResponse(ctx, http.StatusNotFound, err.Error())
-		return
-	}
+    token, err := h.service.GenerateViewTokenByDocumentID(req.DocumentID)
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusNotFound, err.Error())
+        return
+    }
 
-	scheme := "https"
-	if ctx.Request.TLS != nil {
-		scheme = "https"
-	}
+    // 1. Logika Penentuan Secure (Bersih & Dinamis)
+    // Default: Auto-detect dari request
+    isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
+    
+    // Override: Jika di .env ada setting COOKIE_SECURE, pakai itu
+    if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
+        isSecure = envSecure == "true"
+    }
 
-	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
-	viewURL := fmt.Sprintf(urlViewFile, baseURL, token)
+    // 2. Ambil Konfigurasi Cookie Lain dari Env
+    httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true) 
+    domain := os.Getenv("COOKIE_DOMAIN")             
+    path := "/api/documents/view-file"
+    if path == "" {
+        path = "/api/documents/view-file" // Default path spesifik
+    }
 
-	util.SuccessResponse(ctx, successViewResponse, gin.H{
-		"url": viewURL,
-	})
+    // 3. Set SameSite & Cookie
+    sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+    ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
+    
+    ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+
+    // 4. Generate URL Respons (Bersih tanpa Token)
+    // Sesuaikan skema URL dengan status secure cookie agar konsisten
+    scheme := "https"
+    if isSecure {
+        scheme = "https"
+    }
+    
+    baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+    viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+
+    util.SuccessResponse(ctx, successViewResponse, gin.H{
+        "url": viewURL,
+    })
 }
 
 func (h *DocumentHandler) CrawlerBatchUpload(c *gin.Context) {
@@ -872,4 +949,23 @@ func (h *DocumentHandler) CheckDuplicates(ctx *gin.Context) {
 	util.SuccessResponse(ctx, "Scan completed", gin.H{
 		"duplicates": duplicates,
 	})
+}
+
+func getEnvBool(key string, fallback bool) bool {
+    val := os.Getenv(key)
+    if val == "" {
+        return fallback
+    }
+    return val == "true"
+}
+
+func getSameSiteMode(mode string) http.SameSite {
+    switch strings.ToLower(mode) {
+    case "strict":
+        return http.SameSiteStrictMode
+    case "none":
+        return http.SameSiteNoneMode
+    default:
+        return http.SameSiteLaxMode // Default aman
+    }
 }

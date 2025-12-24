@@ -15,7 +15,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const isInvalidID = "Invalid ID"
+
+const (
+	successViewResponse   = "View URL generated successfully"
+	viewTokenCookieName   = "guide_view_token"
+	isInvalidID = "Invalid ID"
+)
 
 type GuideHandler struct {
 	service *GuideService
@@ -164,25 +169,53 @@ func (h *GuideHandler) GenerateViewURL(c *gin.Context) {
 		return
 	}
 
+	
+	isSecure := c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https"
+	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
+		isSecure = envSecure == "true"
+	}
+
+	
+	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
+	domain := os.Getenv("COOKIE_DOMAIN")
+	path := "/api/guides/view-file"
+	
+	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	c.SetSameSite(getSameSiteMode(sameSiteEnv))
+	c.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+
+	
 	scheme := "https"
-	if c.Request.TLS != nil {
+	if isSecure {
 		scheme = "https"
 	}
 	baseURL := fmt.Sprintf("%s://%s", scheme, c.Request.Host)
-	viewURL := fmt.Sprintf("%s/api/guides/view-file?token=%s", baseURL, token)
+	viewURL := fmt.Sprintf("%s/api/guides/view-file", baseURL)
 
-	util.SuccessResponse(c, "View URL generated successfully", gin.H{
+	util.SuccessResponse(c, successViewResponse, gin.H{
 		"url": viewURL,
 	})
 }
 
+
 func (h *GuideHandler) ViewFile(c *gin.Context) {
-	token := c.Query("token")
-	if token == "" {
-		util.ErrorResponse(c, http.StatusBadRequest, "Token is required")
+	
+	token, err := c.Cookie(viewTokenCookieName)
+	if err != nil || token == "" {
+		util.ErrorResponse(c, http.StatusUnauthorized, "Missing access token (cookie required)")
 		return
 	}
 
+	
+	
+	domain := os.Getenv("COOKIE_DOMAIN")
+	path := os.Getenv("COOKIE_PATH")
+	if path == "" {
+		path = "/api/guides/view-file"
+	}
+	c.SetCookie(viewTokenCookieName, "", -1, path, domain, false, true)
+
+	
 	key := "view_guide_token:" + token
 	ctxRedis := context.Background()
 
@@ -197,7 +230,6 @@ func (h *GuideHandler) ViewFile(c *gin.Context) {
 	}
 
 	h.redis.Del(ctxRedis, key)
-
 	filePath := config.GetDocumentPath(filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -208,4 +240,25 @@ func (h *GuideHandler) ViewFile(c *gin.Context) {
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
 	c.File(filePath)
+}
+
+
+
+func getEnvBool(key string, fallback bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val == "true"
+}
+
+func getSameSiteMode(mode string) http.SameSite {
+	switch strings.ToLower(mode) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }
