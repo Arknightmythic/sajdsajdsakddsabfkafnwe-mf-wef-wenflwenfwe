@@ -54,14 +54,12 @@ func (r *GuideRepository) GetAll(filter GuideFilter) ([]Guide, int, error) {
 		return nil, 0, err
 	}
 
-	// Validate sort column
 	allowedSort := map[string]bool{"created_at": true, "title": true, "updated_at": true}
 	sortBy := "created_at"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
-	// Validate sort direction
 	sortDirection := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		sortDirection = "ASC"

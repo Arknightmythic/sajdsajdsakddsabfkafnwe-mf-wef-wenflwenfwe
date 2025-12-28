@@ -126,7 +126,6 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Return tokens in response body
 	util.SuccessResponse(c, "Login successful", response)
 }
 
@@ -137,7 +136,6 @@ func (h *UserHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	// Get session_id from request header or body
 	sessionID := c.GetHeader("X-Session-ID")
 	if sessionID == "" {
 		var req struct {
@@ -198,7 +196,7 @@ func (h *UserHandler) GetActiveSessions(c *gin.Context) {
 }
 
 func (h *UserHandler) RefreshToken(c *gin.Context) {
-	// Get refresh token from request body or header
+
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}

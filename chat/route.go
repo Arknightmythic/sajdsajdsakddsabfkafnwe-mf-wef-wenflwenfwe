@@ -11,10 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 )
-const(
-	urlHistoryID = "/history/:id"
+
+const (
+	urlHistoryID     = "/history/:id"
 	urConversationID = "/conversations/:id"
-) 
+)
 
 func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	repo := NewChatRepository(db)
@@ -44,8 +45,13 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	{
 		chatRoutes.POST("/history", handler.CreateChatHistory)
 		chatRoutes.GET("/history", handler.GetChatHistories)
-		chatRoutes.GET(urlHistoryID, handler.GetChatHistoryByID)
+
+		// PENTING: Route spesifik HARUS di atas route dengan parameter dinamis
+		chatRoutes.GET("/history/download", handler.DownloadChatHistory)
 		chatRoutes.GET("/history/session/:session_id", handler.GetChatHistoryBySessionID)
+
+		// Route dengan parameter dinamis di bawah
+		chatRoutes.GET(urlHistoryID, handler.GetChatHistoryByID)
 		chatRoutes.PUT(urlHistoryID, handler.UpdateChatHistory)
 		chatRoutes.DELETE(urlHistoryID, handler.DeleteChatHistory)
 

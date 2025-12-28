@@ -51,7 +51,6 @@ func (s *GrafanaService) GenerateEmbedURL(req *GenerateEmbedRequest) (string, er
 	}
 
 	queryParams := parsedURL.Query()
-	// queryParams.Set("kiosk", "true")
 	queryParams.Set("theme", "light")
 	queryParams.Set("refresh", "5s")
 	queryParams.Set("timezone", "browser")

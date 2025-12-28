@@ -20,12 +20,12 @@ import (
 )
 
 const (
-	urlViewFileBase = "%s/api/documents/view-file"
+	urlViewFileBase         = "%s/api/documents/view-file"
 	successViewResponse     = "View URL generated successfully"
 	emailNotFoundResponse   = "User email not found"
 	accountNotFoundResponse = "Account type not found"
 	failedParseFormResponse = "Failed to parse multipart form"
-	viewTokenCookieName = "document_view_token"
+	viewTokenCookieName     = "document_view_token"
 )
 
 type FileUploadConfig struct {
@@ -53,164 +53,151 @@ func NewDocumentHandler(service *DocumentService, redisClient *redis.Client) *Do
 }
 
 func (h *DocumentHandler) GenerateViewURL(ctx *gin.Context) {
-    var req struct {
-        Filename string `json:"filename" binding:"required"`
-    }
-    if err := ctx.ShouldBindJSON(&req); err != nil {
-        util.ErrorResponse(ctx, http.StatusBadRequest, "Filename is required")
-        return
-    }
+	var req struct {
+		Filename string `json:"filename" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Filename is required")
+		return
+	}
 
-    token, err := h.service.GenerateViewToken(req.Filename)
-    if err != nil {
-        util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-        return
-    }
+	token, err := h.service.GenerateViewToken(req.Filename)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
 
-    // [PERBAIKAN] Logika penentuan Secure yang bersih
-    // 1. Deteksi otomatis
-    isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
-    
-    // 2. Override jika ENV diset
-    if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-        isSecure = envSecure == "true"
-    }
+	isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
 
-    // Ambil konfigurasi Env
-    httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
-    domain := os.Getenv("COOKIE_DOMAIN")
-    path := "/api/documents/view-file"
+	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
+		isSecure = envSecure == "true"
+	}
 
-    // Set SameSite
-    sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
-    ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
+	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
+	domain := os.Getenv("COOKIE_DOMAIN")
+	path := "/api/documents/view-file"
 
-    // Set Cookie
-    ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
 
-    // Generate Clean URL
-    scheme := "https"
-    if isSecure {
-        scheme = "https"
-    }
-    baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
-    viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+	ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
 
-    util.SuccessResponse(ctx, successViewResponse, gin.H{
-        "url": viewURL,
-    })
+	scheme := "https"
+	if isSecure {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+	viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+
+	util.SuccessResponse(ctx, successViewResponse, gin.H{
+		"url": viewURL,
+	})
 }
 
 func (h *DocumentHandler) GenerateViewURLByID(ctx *gin.Context) {
-    var req struct {
-        ID int `json:"id" binding:"required"`
-    }
-    if err := ctx.ShouldBindJSON(&req); err != nil {
-        util.ErrorResponse(ctx, http.StatusBadRequest, "Document ID is required")
-        return
-    }
+	var req struct {
+		ID int `json:"id" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Document ID is required")
+		return
+	}
 
-    token, err := h.service.GenerateViewTokenByID(req.ID)
-    if err != nil {
-        util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-        return
-    }
+	token, err := h.service.GenerateViewTokenByID(req.ID)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
 
-    // [PERBAIKAN] Logika Secure
-    isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
-    if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-        isSecure = envSecure == "true"
-    }
+	isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
+	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
+		isSecure = envSecure == "true"
+	}
 
-    httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
-    domain := os.Getenv("COOKIE_DOMAIN")
-    path := "/api/documents/view-file"
+	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
+	domain := os.Getenv("COOKIE_DOMAIN")
+	path := "/api/documents/view-file"
 
-    sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
-    ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
-    
-    ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
 
-    scheme := "https"
-    if isSecure {
-        scheme = "https"
-    }
-    baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
-    viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+	ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
 
-    util.SuccessResponse(ctx, successViewResponse, gin.H{
-        "url": viewURL,
-    })
+	scheme := "https"
+	if isSecure {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+	viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+
+	util.SuccessResponse(ctx, successViewResponse, gin.H{
+		"url": viewURL,
+	})
 }
 
 func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
-    token, err := ctx.Cookie(viewTokenCookieName)
-    if err != nil || token == "" {
-        util.ErrorResponse(ctx, http.StatusUnauthorized, "Missing access token (cookie required)")
-        return
-    }
+	token, err := ctx.Cookie(viewTokenCookieName)
+	if err != nil || token == "" {
+		util.ErrorResponse(ctx, http.StatusUnauthorized, "Missing access token (cookie required)")
+		return
+	}
 
-    // Ambil konfigurasi Path & Domain agar DELETE berhasil
-    // Browser butuh path & domain yang SAMA PERSIS untuk menghapus cookie
-    domain := os.Getenv("COOKIE_DOMAIN")
-    path := "/api/documents/view-file"
+	domain := os.Getenv("COOKIE_DOMAIN")
+	path := "/api/documents/view-file"
 
-    // Hapus cookie (MaxAge -1)
-    // Parameter Secure & HttpOnly saat delete tidak terlalu kritikal, tapi sebaiknya disamakan
-    ctx.SetCookie(viewTokenCookieName, "", -1, path, domain, false, true)
+	ctx.SetCookie(viewTokenCookieName, "", -1, path, domain, false, true)
 
-    // ... (Lanjutan logika validasi Redis & Serve File tetap sama) ...
-    key := "view_token:" + token
-    ctxRedis := context.Background()
+	key := "view_token:" + token
+	ctxRedis := context.Background()
 
-    filename, err := h.redis.Get(ctxRedis, key).Result()
-    if err == redis.Nil {
-        util.ErrorResponse(ctx, http.StatusUnauthorized, "Invalid or expired token")
-        return
-    }
+	filename, err := h.redis.Get(ctxRedis, key).Result()
+	if err == redis.Nil {
+		util.ErrorResponse(ctx, http.StatusUnauthorized, "Invalid or expired token")
+		return
+	}
 
-    if err != nil {
-        errorMsg := fmt.Sprintf("Failed to validate token with GET: %v", err)
-        util.ErrorResponse(ctx, http.StatusInternalServerError, errorMsg)
-        return
-    }
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to validate token with GET: %v", err)
+		util.ErrorResponse(ctx, http.StatusInternalServerError, errorMsg)
+		return
+	}
 
-    h.redis.Del(ctxRedis, key)
+	h.redis.Del(ctxRedis, key)
 
-    filePath := config.GetDocumentPath(filename)
-    // ... (sisanya sama dengan kode Anda) ...
-    if _, err := os.Stat(filePath); os.IsNotExist(err) {
-        util.ErrorResponse(ctx, http.StatusNotFound, "File not found")
-        return
-    }
-    
-    file, err := os.Open(filePath)
-    if err != nil {
-        util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to open file")
-        return
-    }
-    defer file.Close()
+	filePath := config.GetDocumentPath(filename)
 
-    fileInfo, err := file.Stat()
-    if err != nil {
-        util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to get file info")
-        return
-    }
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		util.ErrorResponse(ctx, http.StatusNotFound, "File not found")
+		return
+	}
 
-    ext := strings.ToLower(filepath.Ext(filename))
-    contentType := "application/octet-stream"
-    if ext == ".pdf" {
-        contentType = "application/pdf"
-    } else if ext == ".txt" {
-        contentType = "text/plain"
-    }
+	file, err := os.Open(filePath)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to open file")
+		return
+	}
+	defer file.Close()
 
-    ctx.Header("Content-Description", "File View")
-    ctx.Header("Content-Type", contentType)
-    ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
-    ctx.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
+	fileInfo, err := file.Stat()
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to get file info")
+		return
+	}
 
-    io.Copy(ctx.Writer, file)
+	ext := strings.ToLower(filepath.Ext(filename))
+	contentType := "application/octet-stream"
+	if ext == ".pdf" {
+		contentType = "application/pdf"
+	} else if ext == ".txt" {
+		contentType = "text/plain"
+	}
+
+	ctx.Header("Content-Description", "File View")
+	ctx.Header("Content-Type", contentType)
+	ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	ctx.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
+
+	io.Copy(ctx.Writer, file)
 }
 
 func (h *DocumentHandler) getTeamNameForUser(ctx *gin.Context) string {
@@ -266,7 +253,6 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 
 	maxFileSize, validTypes := h.getUploadConfig()
 
-	// Create configuration structs
 	uploadConfig := FileUploadConfig{
 		MaxFileSize: maxFileSize,
 		ValidTypes:  validTypes,
@@ -826,56 +812,49 @@ func (h *DocumentHandler) BatchDeleteDocument(c *gin.Context) {
 }
 
 func (h *DocumentHandler) GenerateViewURLByDocumentID(ctx *gin.Context) {
-    var req struct {
-        DocumentID int `json:"document_id" binding:"required"`
-    }
-    if err := ctx.ShouldBindJSON(&req); err != nil {
-        util.ErrorResponse(ctx, http.StatusBadRequest, "document_id is required")
-        return
-    }
+	var req struct {
+		DocumentID int `json:"document_id" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "document_id is required")
+		return
+	}
 
-    token, err := h.service.GenerateViewTokenByDocumentID(req.DocumentID)
-    if err != nil {
-        util.ErrorResponse(ctx, http.StatusNotFound, err.Error())
-        return
-    }
+	token, err := h.service.GenerateViewTokenByDocumentID(req.DocumentID)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusNotFound, err.Error())
+		return
+	}
 
-    // 1. Logika Penentuan Secure (Bersih & Dinamis)
-    // Default: Auto-detect dari request
-    isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
-    
-    // Override: Jika di .env ada setting COOKIE_SECURE, pakai itu
-    if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-        isSecure = envSecure == "true"
-    }
+	isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
 
-    // 2. Ambil Konfigurasi Cookie Lain dari Env
-    httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true) 
-    domain := os.Getenv("COOKIE_DOMAIN")             
-    path := "/api/documents/view-file"
-    if path == "" {
-        path = "/api/documents/view-file" // Default path spesifik
-    }
+	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
+		isSecure = envSecure == "true"
+	}
 
-    // 3. Set SameSite & Cookie
-    sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
-    ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
-    
-    ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
+	domain := os.Getenv("COOKIE_DOMAIN")
+	path := "/api/documents/view-file"
+	if path == "" {
+		path = "/api/documents/view-file"
+	}
 
-    // 4. Generate URL Respons (Bersih tanpa Token)
-    // Sesuaikan skema URL dengan status secure cookie agar konsisten
-    scheme := "https"
-    if isSecure {
-        scheme = "https"
-    }
-    
-    baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
-    viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
 
-    util.SuccessResponse(ctx, successViewResponse, gin.H{
-        "url": viewURL,
-    })
+	ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
+
+	scheme := "https"
+	if isSecure {
+		scheme = "https"
+	}
+
+	baseURL := fmt.Sprintf("%s://%s", scheme, ctx.Request.Host)
+	viewURL := fmt.Sprintf("%s/api/documents/view-file", baseURL)
+
+	util.SuccessResponse(ctx, successViewResponse, gin.H{
+		"url": viewURL,
+	})
 }
 
 func (h *DocumentHandler) CrawlerBatchUpload(c *gin.Context) {
@@ -952,20 +931,20 @@ func (h *DocumentHandler) CheckDuplicates(ctx *gin.Context) {
 }
 
 func getEnvBool(key string, fallback bool) bool {
-    val := os.Getenv(key)
-    if val == "" {
-        return fallback
-    }
-    return val == "true"
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val == "true"
 }
 
 func getSameSiteMode(mode string) http.SameSite {
-    switch strings.ToLower(mode) {
-    case "strict":
-        return http.SameSiteStrictMode
-    case "none":
-        return http.SameSiteNoneMode
-    default:
-        return http.SameSiteLaxMode // Default aman
-    }
+	switch strings.ToLower(mode) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }

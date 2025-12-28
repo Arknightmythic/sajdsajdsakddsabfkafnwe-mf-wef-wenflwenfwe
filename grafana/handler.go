@@ -28,25 +28,21 @@ func NewGrafanaHandler(service *GrafanaService, redisClient *redis.Client) *Graf
 	}
 }
 
-// GenerateEmbedURL: Menanam Cookie & Return Clean URL
 func (h *GrafanaHandler) GenerateEmbedURL(c *gin.Context) {
-	// Gunakan struct request yang ada di entity.go (atau definisikan inline jika perlu, 
-    // tapi karena Service minta *GenerateEmbedRequest, kita pakai itu)
+
 	var req GenerateEmbedRequest
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// 1. Panggil Service yang sudah ada
 	token, err := h.service.GenerateEmbedURL(&req)
 	if err != nil {
 		util.ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	// 2. Logika Secure Cookie
 	isSecure := c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https"
 	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
 		isSecure = envSecure == "true"
@@ -54,16 +50,14 @@ func (h *GrafanaHandler) GenerateEmbedURL(c *gin.Context) {
 
 	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
 	domain := os.Getenv("COOKIE_DOMAIN")
-	
+
 	path := "/api/grafana/view-embed"
-	
+
 	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
 	c.SetSameSite(getSameSiteMode(sameSiteEnv))
 
-	// 3. Set Cookie (MaxAge 1 menit sesuai dengan service redis TTL)
 	c.SetCookie(grafanaCookieName, token, 60, path, domain, isSecure, httpOnly)
 
-	// 4. Return Clean URL
 	scheme := "https"
 	if isSecure {
 		scheme = "https"
@@ -76,16 +70,14 @@ func (h *GrafanaHandler) GenerateEmbedURL(c *gin.Context) {
 	})
 }
 
-// ViewEmbed: Membaca Cookie -> Redirect ke Grafana Asli
 func (h *GrafanaHandler) ViewEmbed(c *gin.Context) {
-	// 1. Ambil Token dari Cookie
+
 	token, err := c.Cookie(grafanaCookieName)
 	if err != nil || token == "" {
 		util.ErrorResponse(c, http.StatusUnauthorized, "Missing access token (cookie required)")
 		return
 	}
 
-	// 2. Hapus Cookie (One-time use)
 	domain := os.Getenv("COOKIE_DOMAIN")
 	path := os.Getenv("COOKIE_PATH")
 	if path == "" {
@@ -93,11 +85,9 @@ func (h *GrafanaHandler) ViewEmbed(c *gin.Context) {
 	}
 	c.SetCookie(grafanaCookieName, "", -1, path, domain, false, true)
 
-	// 3. Validasi ke Redis
 	ctxRedis := context.Background()
-	key := "grafana_embed_token:" + token 
+	key := "grafana_embed_token:" + token
 
-	// Ambil URL Asli Grafana yang disimpan Service
 	finalGrafanaURL, err := h.redis.Get(ctxRedis, key).Result()
 	if err == redis.Nil {
 		util.ErrorResponse(c, http.StatusUnauthorized, "Invalid or expired token")
@@ -108,15 +98,11 @@ func (h *GrafanaHandler) ViewEmbed(c *gin.Context) {
 		return
 	}
 
-	// Hapus token dari Redis
 	h.redis.Del(ctxRedis, key)
 
-	// 4. REDIRECT ke URL Grafana
-	// Kita tidak mem-proxy konten (GetEmbedContent), melainkan melempar user ke URL yang sudah dibuild service.
 	c.Redirect(http.StatusFound, finalGrafanaURL)
 }
 
-// Helper Functions
 func getEnvBool(key string, fallback bool) bool {
 	val := os.Getenv(key)
 	if val == "" {

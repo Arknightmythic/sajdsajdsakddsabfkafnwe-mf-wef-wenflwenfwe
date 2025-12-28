@@ -2,6 +2,7 @@ package chat
 
 import (
 	"math"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -177,4 +178,8 @@ func (s *ChatService) Feedback(answerID int, sessionID uuid.UUID, feedback bool)
 	}
 
 	return nil
+}
+
+func (s *ChatService) GetChatHistoriesForDownload(startDate, endDate *time.Time, typeFilter string) ([]ChatHistory, error) {
+	return s.repo.GetChatHistoriesForDownload(startDate, endDate, typeFilter)
 }
