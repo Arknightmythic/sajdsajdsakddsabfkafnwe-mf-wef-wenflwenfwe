@@ -897,7 +897,7 @@ func (h *ChatHandler) DownloadChatHistory(ctx *gin.Context) {
 		return
 	}
 
-	startDatePtr, endDatePtr, err := parseDateRange(startDateStr, endDateStr)
+	startDatePtr, endDatePtr, err := parseDateRangeWithTimezone(startDateStr, endDateStr)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf(invalidDateFormat, err))
 		return
@@ -927,6 +927,48 @@ func (h *ChatHandler) DownloadChatHistory(ctx *gin.Context) {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to write Excel file: "+err.Error())
 		return
 	}
+}
+
+func parseDateRangeWithTimezone(startDateStr, endDateStr string) (*time.Time, *time.Time, error) {
+	var startDate, endDate *time.Time
+
+	jakartaLoc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+
+		jakartaLoc = time.FixedZone("WIB", 7*60*60)
+	}
+
+	if startDateStr != "" {
+
+		t, err := time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid start_date format: %v", err)
+		}
+
+		t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, jakartaLoc)
+
+		utcTime := t.UTC()
+		startDate = &utcTime
+
+		log.Printf("Start Date - Input: %s, Jakarta: %s, UTC: %s", startDateStr, t.String(), utcTime.String())
+	}
+
+	if endDateStr != "" {
+
+		t, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid end_date format: %v", err)
+		}
+
+		t = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, jakartaLoc)
+
+		utcTime := t.UTC()
+		endDate = &utcTime
+
+		log.Printf("End Date - Input: %s, Jakarta: %s, UTC: %s", endDateStr, t.String(), utcTime.String())
+	}
+
+	return startDate, endDate, nil
 }
 
 func generateDownloadFilename(typeFilter, startDate, endDate string) string {
