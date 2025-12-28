@@ -284,7 +284,7 @@ func (h *DocumentHandler) getUploadConfig() (int, map[string]bool) {
 
 	maxFileSizeFromEnv, err := strconv.Atoi(os.Getenv("MAX_FILE_SIZE_ALLOWED"))
 	if err != nil {
-		maxFileSizeFromEnv = 70
+		maxFileSizeFromEnv = 100
 	}
 	maxFileSize := maxFileSizeFromEnv * 1024 * 1024
 	return maxFileSize, validTypes
