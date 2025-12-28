@@ -725,21 +725,51 @@ func (r *ChatRepository) GetChatHistoriesForDownload(startDate, endDate *time.Ti
 	argCount := 1
 
 	if startDate != nil {
-		query += fmt.Sprintf(" AND start_timestamp >= $%d", argCount)
+		query += fmt.Sprintf(" AND COALESCE(start_timestamp, created_at) >= $%d", argCount)
 		args = append(args, startDate)
 		argCount++
 	}
 
 	if endDate != nil {
-		query += fmt.Sprintf(" AND start_timestamp <= $%d", argCount)
+		query += fmt.Sprintf(" AND COALESCE(start_timestamp, created_at) <= $%d", argCount)
 		args = append(args, endDate)
 		argCount++
 	}
 
-	if typeFilter != "all" {
-		query += fmt.Sprintf(" AND message->'data'->>'type' = $%d", argCount)
-		args = append(args, typeFilter)
-		argCount++
+	switch typeFilter {
+	case "all":
+
+	case "human-ai":
+
+		query += ` AND (
+			(message->'data'->>'type' = 'ai' AND message->'data'->>'id' IS NOT NULL AND message->'data'->>'id' != '')
+			OR 
+			(message->'data'->>'type' = 'human' AND message->'data'->'additional_kwargs' IS NULL)
+		)`
+
+	case "human-agent":
+
+		query += ` AND (
+			(message->'data'->>'type' = 'ai' AND (message->'data'->>'id' IS NULL OR message->'data'->>'id' = '' OR message->'data'->>'id' = 'null'))
+			OR 
+			(message->'data'->>'type' = 'human' AND message->'data'->'additional_kwargs' IS NOT NULL)
+		)`
+
+	case "ai":
+
+		query += " AND message->'data'->>'type' = 'ai'"
+		query += " AND message->'data'->>'id' IS NOT NULL"
+		query += " AND message->'data'->>'id' != ''"
+		query += " AND message->'data'->>'id' != 'null'"
+
+	case "agent":
+
+		query += " AND message->'data'->>'type' = 'ai'"
+		query += " AND (message->'data'->>'id' IS NULL OR message->'data'->>'id' = '' OR message->'data'->>'id' = 'null')"
+
+	case "human":
+
+		query += " AND message->'data'->>'type' = 'human'"
 	}
 
 	query += " ORDER BY created_at ASC"
