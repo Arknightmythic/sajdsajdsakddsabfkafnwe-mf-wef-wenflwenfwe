@@ -724,7 +724,11 @@ func (r *ChatRepository) GetChatHistoriesForDownload(startDate, endDate *time.Ti
 	args := []interface{}{}
 	argCount := 1
 
+	fmt.Println(startDate)
+	fmt.Println(endDate)
+
 	if startDate != nil {
+
 		query += fmt.Sprintf(" AND COALESCE(start_timestamp, created_at) >= $%d", argCount)
 		args = append(args, startDate)
 		argCount++
