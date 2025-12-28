@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/xuri/excelize/v2"
 )
 
 const (
@@ -908,20 +909,24 @@ func (h *ChatHandler) DownloadChatHistory(ctx *gin.Context) {
 		return
 	}
 
-	csvData, err := generateChatHistoryCSV(histories)
+	excelFile, err := generateChatHistoryExcel(histories)
 	if err != nil {
-		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to generate CSV: "+err.Error())
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to generate Excel: "+err.Error())
 		return
 	}
+	defer excelFile.Close()
 
 	filename := generateDownloadFilename(typeFilter, startDateStr, endDateStr)
 
 	ctx.Header("Content-Description", "File Transfer")
 	ctx.Header("Content-Disposition", "attachment; filename="+filename)
-	ctx.Header("Content-Type", "text/csv; charset=utf-8")
+	ctx.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	ctx.Header("Content-Transfer-Encoding", "binary")
 
-	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", append([]byte{0xEF, 0xBB, 0xBF}, csvData...))
+	if err := excelFile.Write(ctx.Writer); err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to write Excel file: "+err.Error())
+		return
+	}
 }
 
 func generateDownloadFilename(typeFilter, startDate, endDate string) string {
@@ -964,21 +969,89 @@ func generateDownloadFilename(typeFilter, startDate, endDate string) string {
 
 	var filename string
 	if startDateStr != "" && endDateStr != "" {
-		filename = fmt.Sprintf("%s-%s-%s.csv", typeStr, startDateStr, endDateStr)
+		filename = fmt.Sprintf("%s-%s-%s.xlsx", typeStr, startDateStr, endDateStr)
 	} else if startDateStr != "" {
-		filename = fmt.Sprintf("%s-%s.csv", typeStr, startDateStr)
+		filename = fmt.Sprintf("%s-%s.xlsx", typeStr, startDateStr)
 	} else if endDateStr != "" {
-		filename = fmt.Sprintf("%s-%s.csv", typeStr, endDateStr)
+		filename = fmt.Sprintf("%s-%s.xlsx", typeStr, endDateStr)
 	} else {
 
-		filename = fmt.Sprintf("%s-%s.csv", typeStr, time.Now().Format("02-01-2006"))
+		filename = fmt.Sprintf("%s-%s.xlsx", typeStr, time.Now().Format("02-01-2006"))
 	}
 
 	return filename
 }
 
-func generateChatHistoryCSV(histories []ChatHistory) ([]byte, error) {
-	var buf strings.Builder
+func generateChatHistoryExcel(histories []ChatHistory) (*excelize.File, error) {
+	f := excelize.NewFile()
+
+	sheetName := "Chat History"
+	index, err := f.NewSheet(sheetName)
+	if err != nil {
+		return nil, err
+	}
+
+	f.SetActiveSheet(index)
+
+	headerStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{
+			Bold:  true,
+			Size:  11,
+			Color: "FFFFFF",
+		},
+		Fill: excelize.Fill{
+			Type:    "pattern",
+			Color:   []string{"4472C4"},
+			Pattern: 1,
+		},
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+			WrapText:   true,
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "FFFFFF", Style: 1},
+			{Type: "top", Color: "FFFFFF", Style: 1},
+			{Type: "bottom", Color: "FFFFFF", Style: 1},
+			{Type: "right", Color: "FFFFFF", Style: 1},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	cellStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			Vertical:   "top",
+			WrapText:   true,
+			Horizontal: "left",
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "D3D3D3", Style: 1},
+			{Type: "top", Color: "D3D3D3", Style: 1},
+			{Type: "bottom", Color: "D3D3D3", Style: 1},
+			{Type: "right", Color: "D3D3D3", Style: 1},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	centeredStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			Vertical:   "center",
+			Horizontal: "center",
+		},
+		Border: []excelize.Border{
+			{Type: "left", Color: "D3D3D3", Style: 1},
+			{Type: "top", Color: "D3D3D3", Style: 1},
+			{Type: "bottom", Color: "D3D3D3", Style: 1},
+			{Type: "right", Color: "D3D3D3", Style: 1},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	headers := []string{
 		"ID",
@@ -997,9 +1070,33 @@ func generateChatHistoryCSV(histories []ChatHistory) ([]byte, error) {
 		"Is Validated",
 		"Start Timestamp",
 	}
-	buf.WriteString(strings.Join(headers, ",") + "\n")
 
-	for _, history := range histories {
+	for i, header := range headers {
+		cell := fmt.Sprintf("%s1", string(rune('A'+i)))
+		f.SetCellValue(sheetName, cell, header)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+
+	f.SetColWidth(sheetName, "A", "A", 8)
+	f.SetColWidth(sheetName, "B", "B", 38)
+	f.SetColWidth(sheetName, "C", "C", 12)
+	f.SetColWidth(sheetName, "D", "D", 80)
+	f.SetColWidth(sheetName, "E", "E", 20)
+	f.SetColWidth(sheetName, "F", "F", 10)
+	f.SetColWidth(sheetName, "G", "G", 15)
+	f.SetColWidth(sheetName, "H", "H", 15)
+	f.SetColWidth(sheetName, "I", "I", 10)
+	f.SetColWidth(sheetName, "J", "J", 20)
+	f.SetColWidth(sheetName, "K", "K", 25)
+	f.SetColWidth(sheetName, "L", "L", 12)
+	f.SetColWidth(sheetName, "M", "M", 40)
+	f.SetColWidth(sheetName, "N", "N", 12)
+	f.SetColWidth(sheetName, "O", "O", 20)
+
+	f.SetRowHeight(sheetName, 1, 30)
+
+	for i, history := range histories {
+		row := i + 2
 
 		messageType := ""
 		content := ""
@@ -1009,32 +1106,85 @@ func generateChatHistoryCSV(histories []ChatHistory) ([]byte, error) {
 				messageType = t
 			}
 			if c, ok := dataMap["content"].(string); ok {
-				content = escapeCSV(c)
+
+				content = strings.TrimSpace(c)
+
+				content = strings.ReplaceAll(content, "\r\n", "\n")
 			}
 		}
 
-		row := []string{
-			fmt.Sprintf("%d", history.ID),
-			history.SessionID.String(),
-			messageType,
-			content,
-			history.CreatedAt.Format("2006-01-02 15:04:05"),
-			formatNullableInt64(history.UserID),
-			formatNullableBool(history.IsCannotAnswer),
-			escapeCSV(formatNullableString(history.Category)),
-			formatNullableBool(history.Feedback),
-			escapeCSV(formatNullableString(history.QuestionCategory)),
-			escapeCSV(formatNullableString(history.QuestionSubCategory)),
-			formatNullableBool(history.IsAnswered),
-			escapeCSV(formatNullableString(history.Revision)),
-			formatNullableBool(history.IsValidated),
-			formatTimestamp(history.StartTimestamp),
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), history.ID)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), history.SessionID.String())
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), messageType)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), content)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), history.CreatedAt.Format("2006-01-02 15:04:05"))
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), formatNullableInt64(history.UserID))
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), formatNullableBool(history.IsCannotAnswer))
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), formatNullableString(history.Category))
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), formatNullableBool(history.Feedback))
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), formatNullableString(history.QuestionCategory))
+		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), formatNullableString(history.QuestionSubCategory))
+		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), formatNullableBool(history.IsAnswered))
+
+		revision := formatNullableString(history.Revision)
+		if revision != "" {
+			revision = strings.TrimSpace(revision)
+		}
+		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), revision)
+
+		f.SetCellValue(sheetName, fmt.Sprintf("N%d", row), formatNullableBool(history.IsValidated))
+		f.SetCellValue(sheetName, fmt.Sprintf("O%d", row), formatTimestamp(history.StartTimestamp))
+
+		f.SetCellStyle(sheetName, fmt.Sprintf("D%d", row), fmt.Sprintf("D%d", row), cellStyle)
+		f.SetCellStyle(sheetName, fmt.Sprintf("M%d", row), fmt.Sprintf("M%d", row), cellStyle)
+
+		centerCols := []string{"A", "C", "E", "F", "G", "I", "L", "N", "O"}
+		for _, col := range centerCols {
+			cell := fmt.Sprintf("%s%d", col, row)
+			f.SetCellStyle(sheetName, cell, cell, centeredStyle)
 		}
 
-		buf.WriteString(strings.Join(row, ",") + "\n")
+		textCols := []string{"B", "H", "J", "K"}
+		for _, col := range textCols {
+			cell := fmt.Sprintf("%s%d", col, row)
+			f.SetCellStyle(sheetName, cell, cell, cellStyle)
+		}
+
+		contentLines := len(strings.Split(content, "\n"))
+		if contentLines < 1 {
+			contentLines = 1
+		}
+
+		estimatedLines := (len(content) / 100) + 1
+		if estimatedLines > contentLines {
+			contentLines = estimatedLines
+		}
+
+		rowHeight := float64(contentLines * 15)
+		if rowHeight < 30 {
+			rowHeight = 30
+		}
+		if rowHeight > 300 {
+			rowHeight = 300
+		}
+
+		f.SetRowHeight(sheetName, row, rowHeight)
 	}
 
-	return []byte(buf.String()), nil
+	f.SetPanes(sheetName, &excelize.Panes{
+		Freeze:      true,
+		XSplit:      0,
+		YSplit:      1,
+		TopLeftCell: "A2",
+		ActivePane:  "bottomLeft",
+	})
+
+	sheetIndex, err := f.GetSheetIndex("Sheet1")
+	if err == nil && sheetIndex != -1 {
+		f.DeleteSheet("Sheet1")
+	}
+
+	return f, nil
 }
 
 func escapeCSV(field string) string {
