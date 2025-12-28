@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -72,14 +73,12 @@ func (r *ChatRepository) GetAllChatHistory(filter ChatHistoryFilter) ([]ChatHist
 		return nil, 0, err
 	}
 
-	// Validate sort column
 	allowedSort := map[string]bool{"created_at": true, "user_id": true, "id": true, "session_id": true}
 	sortBy := "created_at"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
-	// Validate sort direction
 	sortDirection := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		sortDirection = "ASC"
@@ -150,14 +149,12 @@ func (r *ChatRepository) GetChatHistoryBySessionID(sessionID uuid.UUID, filter C
 		return nil, 0, err
 	}
 
-	// Validate sort column
 	allowedSort := map[string]bool{"created_at": true, "user_id": true, "id": true}
 	sortBy := "created_at"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
-	// Validate sort direction
 	sortDirection := "ASC"
 	if strings.ToUpper(filter.SortDirection) == "DESC" {
 		sortDirection = "DESC"
@@ -267,14 +264,12 @@ func (r *ChatRepository) GetAllConversations(filter ConversationFilter) ([]Conve
 		return nil, 0, err
 	}
 
-	// Validate sort column
 	allowedSort := map[string]bool{"start_timestamp": true, "end_timestamp": true, "id": true}
 	sortBy := "start_timestamp"
 	if filter.SortBy != "" && allowedSort[filter.SortBy] {
 		sortBy = filter.SortBy
 	}
 
-	// Validate sort direction
 	sortDirection := "DESC"
 	if strings.ToUpper(filter.SortDirection) == "ASC" {
 		sortDirection = "ASC"
@@ -703,4 +698,57 @@ func (r *ChatRepository) UpdateChatFeedback(sessionID uuid.UUID, feedback bool) 
 
 	_, err := r.db.Exec(query, sessionID, feedback)
 	return err
+}
+
+func (r *ChatRepository) GetChatHistoriesForDownload(startDate, endDate *time.Time, typeFilter string) ([]ChatHistory, error) {
+	query := `
+		SELECT 
+			id, 
+			session_id, 
+			message, 
+			created_at, 
+			user_id, 
+			is_cannot_answer, 
+			category, 
+			feedback, 
+			question_category, 
+			question_sub_category, 
+			is_answered, 
+			revision, 
+			is_validated,
+			COALESCE(start_timestamp::text, '') as start_timestamp
+		FROM chat_history
+		WHERE 1=1
+	`
+
+	args := []interface{}{}
+	argCount := 1
+
+	if startDate != nil {
+		query += fmt.Sprintf(" AND start_timestamp >= $%d", argCount)
+		args = append(args, startDate)
+		argCount++
+	}
+
+	if endDate != nil {
+		query += fmt.Sprintf(" AND start_timestamp <= $%d", argCount)
+		args = append(args, endDate)
+		argCount++
+	}
+
+	if typeFilter != "all" {
+		query += fmt.Sprintf(" AND message->'data'->>'type' = $%d", argCount)
+		args = append(args, typeFilter)
+		argCount++
+	}
+
+	query += " ORDER BY created_at ASC"
+
+	var histories []ChatHistory
+	err := r.db.Select(&histories, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return histories, nil
 }

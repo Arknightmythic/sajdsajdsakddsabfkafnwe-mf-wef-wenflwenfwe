@@ -1,4 +1,3 @@
-// util/cookie_helper.go (atau tambahkan di util/response.go)
 package util
 
 import (

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -873,4 +874,152 @@ func (h *ChatHandler) Feedback(ctx *gin.Context) {
 
 func (h *ChatHandler) Close() error {
 	return h.wsClient.Close()
+}
+
+func (h *ChatHandler) DownloadChatHistory(ctx *gin.Context) {
+	// Parse query parameters
+	startDateStr := ctx.Query("start_date")
+	endDateStr := ctx.Query("end_date")
+	typeFilter := ctx.DefaultQuery("type", "all") // all, human, ai
+
+	// Validate type parameter
+	if typeFilter != "all" && typeFilter != "human" && typeFilter != "ai" {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid type parameter. Must be 'all', 'human', or 'ai'")
+		return
+	}
+
+	// Parse dates
+	startDatePtr, endDatePtr, err := parseDateRange(startDateStr, endDateStr)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf(invalidDateFormat, err))
+		return
+	}
+
+	// Get chat histories from service
+	histories, err := h.service.GetChatHistoriesForDownload(startDatePtr, endDatePtr, typeFilter)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Generate CSV
+	csvData, err := generateChatHistoryCSV(histories)
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to generate CSV: "+err.Error())
+		return
+	}
+
+	// Set headers for file download
+	filename := fmt.Sprintf("chat_history_%s_%s_%s.csv",
+		typeFilter,
+		time.Now().Format("20060102"),
+		time.Now().Format("150405"))
+
+	ctx.Header("Content-Description", "File Transfer")
+	ctx.Header("Content-Disposition", "attachment; filename="+filename)
+	ctx.Header("Content-Type", "text/csv; charset=utf-8")
+	ctx.Header("Content-Transfer-Encoding", "binary")
+
+	// Add BOM for Excel UTF-8 compatibility
+	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", append([]byte{0xEF, 0xBB, 0xBF}, csvData...))
+}
+
+func generateChatHistoryCSV(histories []ChatHistory) ([]byte, error) {
+	var buf strings.Builder
+
+	// Write CSV header
+	headers := []string{
+		"ID",
+		"Session ID",
+		"Type",
+		"Content",
+		"Created At",
+		"User ID",
+		"Is Cannot Answer",
+		"Category",
+		"Feedback",
+		"Question Category",
+		"Question Sub Category",
+		"Is Answered",
+		"Revision",
+		"Is Validated",
+		"Start Timestamp",
+	}
+	buf.WriteString(strings.Join(headers, ",") + "\n")
+
+	// Write data rows
+	for _, history := range histories {
+		// Extract message type and content from JSON
+		messageType := ""
+		content := ""
+
+		if dataMap, ok := history.Message["data"].(map[string]interface{}); ok {
+			if t, ok := dataMap["type"].(string); ok {
+				messageType = t
+			}
+			if c, ok := dataMap["content"].(string); ok {
+				content = escapeCSV(c)
+			}
+		}
+
+		row := []string{
+			fmt.Sprintf("%d", history.ID),
+			history.SessionID.String(),
+			messageType,
+			content,
+			history.CreatedAt.Format("2006-01-02 15:04:05"),
+			formatNullableInt64(history.UserID),
+			formatNullableBool(history.IsCannotAnswer),
+			escapeCSV(formatNullableString(history.Category)),
+			formatNullableBool(history.Feedback),
+			escapeCSV(formatNullableString(history.QuestionCategory)),
+			escapeCSV(formatNullableString(history.QuestionSubCategory)),
+			formatNullableBool(history.IsAnswered),
+			escapeCSV(formatNullableString(history.Revision)),
+			formatNullableBool(history.IsValidated),
+			formatTimestamp(history.StartTimestamp),
+		}
+
+		buf.WriteString(strings.Join(row, ",") + "\n")
+	}
+
+	return []byte(buf.String()), nil
+}
+
+func escapeCSV(field string) string {
+	// If field contains comma, newline, or quotes, wrap it in quotes
+	if strings.Contains(field, ",") || strings.Contains(field, "\n") || strings.Contains(field, "\"") {
+		// Escape existing quotes by doubling them
+		field = strings.ReplaceAll(field, "\"", "\"\"")
+		return fmt.Sprintf("\"%s\"", field)
+	}
+	return field
+}
+
+func formatNullableInt64(val *int64) string {
+	if val == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", *val)
+}
+
+func formatNullableBool(val *bool) string {
+	if val == nil {
+		return ""
+	}
+	return fmt.Sprintf("%t", *val)
+}
+
+func formatNullableString(val *string) string {
+	if val == nil {
+		return ""
+	}
+	return *val
+}
+
+func formatTimestamp(val string) string {
+	if val == "" {
+		return ""
+	}
+	return val
 }

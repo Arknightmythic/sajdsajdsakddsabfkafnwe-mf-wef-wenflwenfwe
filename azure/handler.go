@@ -81,7 +81,6 @@ func (h *AzureHandler) Callback(c *gin.Context) {
 	fmt.Printf("Access Token: %s...\n", loginResp.AccessToken[:20])
 	fmt.Printf("Refresh Token: %s...\n", loginResp.RefreshToken[:20])
 
-	// Redirect to frontend with tokens as query parameters
 	frontendURL := fmt.Sprintf("%s?status=login-success&access_token=%s&refresh_token=%s&session_id=%s",
 		h.Service.Config.FrontendCallbackURL,
 		url.QueryEscape(loginResp.AccessToken),
