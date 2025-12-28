@@ -877,57 +877,109 @@ func (h *ChatHandler) Close() error {
 }
 
 func (h *ChatHandler) DownloadChatHistory(ctx *gin.Context) {
-	// Parse query parameters
+
 	startDateStr := ctx.Query("start_date")
 	endDateStr := ctx.Query("end_date")
-	typeFilter := ctx.DefaultQuery("type", "all") // all, human, ai
+	typeFilter := ctx.DefaultQuery("type", "all")
 
-	// Validate type parameter
-	if typeFilter != "all" && typeFilter != "human" && typeFilter != "ai" {
-		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid type parameter. Must be 'all', 'human', or 'ai'")
+	validTypes := []string{"all", "human-ai", "human-agent", "ai", "agent", "human"}
+	isValid := false
+	for _, validType := range validTypes {
+		if typeFilter == validType {
+			isValid = true
+			break
+		}
+	}
+
+	if !isValid {
+		util.ErrorResponse(ctx, http.StatusBadRequest, "Invalid type parameter. Must be 'all', 'human-ai', 'human-agent', 'ai', 'agent', or 'human'")
 		return
 	}
 
-	// Parse dates
 	startDatePtr, endDatePtr, err := parseDateRange(startDateStr, endDateStr)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusBadRequest, fmt.Sprintf(invalidDateFormat, err))
 		return
 	}
 
-	// Get chat histories from service
 	histories, err := h.service.GetChatHistoriesForDownload(startDatePtr, endDatePtr, typeFilter)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	// Generate CSV
 	csvData, err := generateChatHistoryCSV(histories)
 	if err != nil {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to generate CSV: "+err.Error())
 		return
 	}
 
-	// Set headers for file download
-	filename := fmt.Sprintf("chat_history_%s_%s_%s.csv",
-		typeFilter,
-		time.Now().Format("20060102"),
-		time.Now().Format("150405"))
+	filename := generateDownloadFilename(typeFilter, startDateStr, endDateStr)
 
 	ctx.Header("Content-Description", "File Transfer")
 	ctx.Header("Content-Disposition", "attachment; filename="+filename)
 	ctx.Header("Content-Type", "text/csv; charset=utf-8")
 	ctx.Header("Content-Transfer-Encoding", "binary")
 
-	// Add BOM for Excel UTF-8 compatibility
 	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", append([]byte{0xEF, 0xBB, 0xBF}, csvData...))
+}
+
+func generateDownloadFilename(typeFilter, startDate, endDate string) string {
+
+	var typeStr string
+	switch typeFilter {
+	case "all":
+		typeStr = "All"
+	case "human-ai":
+		typeStr = "Human-AI"
+	case "human-agent":
+		typeStr = "Human-Agent"
+	case "ai":
+		typeStr = "AI"
+	case "agent":
+		typeStr = "Agent"
+	case "human":
+		typeStr = "Human"
+	default:
+		typeStr = "All"
+	}
+
+	var startDateStr, endDateStr string
+
+	if startDate != "" {
+		if t, err := time.Parse("2006-01-02", startDate); err == nil {
+			startDateStr = t.Format("02-01-2006")
+		} else {
+			startDateStr = ""
+		}
+	}
+
+	if endDate != "" {
+		if t, err := time.Parse("2006-01-02", endDate); err == nil {
+			endDateStr = t.Format("02-01-2006")
+		} else {
+			endDateStr = ""
+		}
+	}
+
+	var filename string
+	if startDateStr != "" && endDateStr != "" {
+		filename = fmt.Sprintf("%s-%s-%s.csv", typeStr, startDateStr, endDateStr)
+	} else if startDateStr != "" {
+		filename = fmt.Sprintf("%s-%s.csv", typeStr, startDateStr)
+	} else if endDateStr != "" {
+		filename = fmt.Sprintf("%s-%s.csv", typeStr, endDateStr)
+	} else {
+
+		filename = fmt.Sprintf("%s-%s.csv", typeStr, time.Now().Format("02-01-2006"))
+	}
+
+	return filename
 }
 
 func generateChatHistoryCSV(histories []ChatHistory) ([]byte, error) {
 	var buf strings.Builder
 
-	// Write CSV header
 	headers := []string{
 		"ID",
 		"Session ID",
@@ -947,9 +999,8 @@ func generateChatHistoryCSV(histories []ChatHistory) ([]byte, error) {
 	}
 	buf.WriteString(strings.Join(headers, ",") + "\n")
 
-	// Write data rows
 	for _, history := range histories {
-		// Extract message type and content from JSON
+
 		messageType := ""
 		content := ""
 
@@ -987,9 +1038,9 @@ func generateChatHistoryCSV(histories []ChatHistory) ([]byte, error) {
 }
 
 func escapeCSV(field string) string {
-	// If field contains comma, newline, or quotes, wrap it in quotes
+
 	if strings.Contains(field, ",") || strings.Contains(field, "\n") || strings.Contains(field, "\"") {
-		// Escape existing quotes by doubling them
+
 		field = strings.ReplaceAll(field, "\"", "\"\"")
 		return fmt.Sprintf("\"%s\"", field)
 	}
