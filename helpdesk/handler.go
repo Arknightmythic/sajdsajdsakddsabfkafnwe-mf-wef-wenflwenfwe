@@ -95,8 +95,8 @@ func (h *HelpdeskHandler) GetAll(ctx *gin.Context) {
 	if limit <= 0 {
 		limit = 10
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > 3000 {
+		limit = 3000
 	}
 	if offset < 0 {
 		offset = 0
