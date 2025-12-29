@@ -950,7 +950,6 @@ func parseDateRangeWithTimezone(startDateStr, endDateStr string) (*time.Time, *t
 		utcTime := t.UTC()
 		startDate = &utcTime
 
-		log.Printf("Start Date - Input: %s, Jakarta: %s, UTC: %s", startDateStr, t.String(), utcTime.String())
 	}
 
 	if endDateStr != "" {
@@ -965,7 +964,6 @@ func parseDateRangeWithTimezone(startDateStr, endDateStr string) (*time.Time, *t
 		utcTime := t.UTC()
 		endDate = &utcTime
 
-		log.Printf("End Date - Input: %s, Jakarta: %s, UTC: %s", endDateStr, t.String(), utcTime.String())
 	}
 
 	return startDate, endDate, nil
@@ -1034,6 +1032,11 @@ func generateChatHistoryExcel(histories []ChatHistory) (*excelize.File, error) {
 	}
 
 	f.SetActiveSheet(index)
+
+	jakartaLoc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		jakartaLoc = time.FixedZone("WIB", 7*60*60)
+	}
 
 	headerStyle, err := f.NewStyle(&excelize.Style{
 		Font: &excelize.Font{
@@ -1142,6 +1145,7 @@ func generateChatHistoryExcel(histories []ChatHistory) (*excelize.File, error) {
 
 		messageType := ""
 		content := ""
+		messageID := ""
 
 		if dataMap, ok := history.Message["data"].(map[string]interface{}); ok {
 			if t, ok := dataMap["type"].(string); ok {
@@ -1153,13 +1157,31 @@ func generateChatHistoryExcel(histories []ChatHistory) (*excelize.File, error) {
 
 				content = strings.ReplaceAll(content, "\r\n", "\n")
 			}
+
+			if id, ok := dataMap["id"]; ok && id != nil {
+				if idStr, ok := id.(string); ok {
+					messageID = idStr
+				}
+			}
 		}
+
+		displayType := messageType
+		if messageType == "ai" && (messageID == "" || messageID == "null") {
+			displayType = "Agent"
+		} else if messageType == "ai" {
+			displayType = "AI"
+		} else if messageType == "human" {
+			displayType = "Human"
+		}
+
+		createdAtWIB := history.CreatedAt.In(jakartaLoc)
+		createdAtDisplay := createdAtWIB.Format("2006-01-02 15:04:05")
 
 		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), history.ID)
 		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), history.SessionID.String())
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), messageType)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), displayType)
 		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), content)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), history.CreatedAt.Format("2006-01-02 15:04:05"))
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), createdAtDisplay)
 		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), formatNullableInt64(history.UserID))
 		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), formatNullableBool(history.IsCannotAnswer))
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), formatNullableString(history.Category))
@@ -1175,7 +1197,19 @@ func generateChatHistoryExcel(histories []ChatHistory) (*excelize.File, error) {
 		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), revision)
 
 		f.SetCellValue(sheetName, fmt.Sprintf("N%d", row), formatNullableBool(history.IsValidated))
-		f.SetCellValue(sheetName, fmt.Sprintf("O%d", row), formatTimestamp(history.StartTimestamp))
+
+		startTimestampDisplay := ""
+		if history.StartTimestamp != "" {
+
+			if t, err := time.Parse("2006-01-02 15:04:05.999", history.StartTimestamp); err == nil {
+
+				tWIB := t.UTC().In(jakartaLoc)
+				startTimestampDisplay = tWIB.Format("2006-01-02 15:04:05")
+			} else {
+				startTimestampDisplay = history.StartTimestamp
+			}
+		}
+		f.SetCellValue(sheetName, fmt.Sprintf("O%d", row), startTimestampDisplay)
 
 		f.SetCellStyle(sheetName, fmt.Sprintf("D%d", row), fmt.Sprintf("D%d", row), cellStyle)
 		f.SetCellStyle(sheetName, fmt.Sprintf("M%d", row), fmt.Sprintf("M%d", row), cellStyle)
@@ -1227,16 +1261,6 @@ func generateChatHistoryExcel(histories []ChatHistory) (*excelize.File, error) {
 	}
 
 	return f, nil
-}
-
-func escapeCSV(field string) string {
-
-	if strings.Contains(field, ",") || strings.Contains(field, "\n") || strings.Contains(field, "\"") {
-
-		field = strings.ReplaceAll(field, "\"", "\"\"")
-		return fmt.Sprintf("\"%s\"", field)
-	}
-	return field
 }
 
 func formatNullableInt64(val *int64) string {
