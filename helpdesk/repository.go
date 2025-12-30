@@ -187,3 +187,24 @@ func (r *HelpdeskRepository) EndTimestampConversation(id uuid.UUID, endTimestamp
 	_, err := r.db.Exec(`UPDATE conversations SET end_timestamp = $1 WHERE id = $2`, endTimestamp, id)
 	return err
 }
+
+
+func (r *HelpdeskRepository) GetSummary() (*HelpdeskSummary, error) {
+	var summary HelpdeskSummary
+		
+	query := `
+		SELECT 
+			COALESCE(SUM(CASE WHEN status ILIKE 'queue' OR status ILIKE 'open' THEN 1 ELSE 0 END), 0) as queue,
+			COALESCE(SUM(CASE WHEN status ILIKE 'in_progress' THEN 1 ELSE 0 END), 0) as active,
+			COALESCE(SUM(CASE WHEN status ILIKE 'pending' THEN 1 ELSE 0 END), 0) as pending,
+			COALESCE(SUM(CASE WHEN status ILIKE 'resolved' OR status ILIKE 'closed' THEN 1 ELSE 0 END), 0) as resolved
+		FROM helpdesk
+	`
+	
+	err := r.db.Get(&summary, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &summary, nil
+}

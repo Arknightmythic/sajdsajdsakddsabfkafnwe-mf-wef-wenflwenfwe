@@ -74,3 +74,7 @@ func (s *HelpdeskService) SolvedConversation(id uuid.UUID) error {
 
 	return nil
 }
+
+func (s *HelpdeskService) GetSummary() (*HelpdeskSummary, error) {
+	return s.repo.GetSummary()
+}

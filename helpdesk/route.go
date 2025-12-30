@@ -41,7 +41,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		helpdeskRoutes.PUT("/:id", handler.UpdateHelpdesk)
 		helpdeskRoutes.DELETE("/:id", handler.DeleteHelpdesk)
 		helpdeskRoutes.POST("/ask", handler.AskHelpdesk)
-
+		helpdeskRoutes.GET("/summary", handler.GetSummary)
 		helpdeskRoutes.POST("/solved/:id", handler.SolvedConversation)
 		helpdeskRoutes.GET("/switch", handler.GetSwitchStatus)
 		helpdeskRoutes.POST("/switch", handler.UpdateSwitchStatus)

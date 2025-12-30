@@ -288,3 +288,13 @@ func (h *HelpdeskHandler) SolvedConversation(ctx *gin.Context) {
 
 	util.SuccessResponse(ctx, "Conversation successfully solved", nil)
 }
+
+func (h *HelpdeskHandler) GetSummary(ctx *gin.Context) {
+	summary, err := h.service.GetSummary()
+	if err != nil {
+		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	util.SuccessResponse(ctx, "Helpdesk summary retrieved successfully", summary)
+}

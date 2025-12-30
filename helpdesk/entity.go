@@ -17,3 +17,10 @@ type SwitchHelpdesk struct {
 	ID     int  `db:"id" json:"id"`
 	Status bool `db:"status" json:"status"`
 }
+
+type HelpdeskSummary struct {
+	Queue    int `db:"queue" json:"queue"`
+	Active   int `db:"active" json:"active"`
+	Pending  int `db:"pending" json:"pending"`
+	Resolved int `db:"resolved" json:"resolved"`
+}
