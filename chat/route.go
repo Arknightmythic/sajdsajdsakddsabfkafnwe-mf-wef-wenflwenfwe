@@ -6,6 +6,7 @@ import (
 	"dokuprime-be/helpdesk"
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
+	"log"
 	"os"
 	"strconv"
 
@@ -53,6 +54,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		}
 
 	}
+
+	log.Println(defaulChattLimit, "is the limit for concurrent chat requests")
 
 	chatRoutes := r.Group("/api/chat")
 	chatRoutes.Use(middleware.AuthMiddleware())
