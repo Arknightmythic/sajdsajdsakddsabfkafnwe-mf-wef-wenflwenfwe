@@ -19,6 +19,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	roleGroup := r.Group("/api/roles")
 
 	roleGroup.Use(middleware.AuthMiddleware())
+	roleGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		roleGroup.POST("", handler.Create)
 		roleGroup.GET("", handler.GetAll)
