@@ -15,6 +15,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	permissionRoutes := r.Group("/api/permissions")
 
 	permissionRoutes.Use(middleware.AuthMiddleware())
+	permissionRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		permissionRoutes.POST("", handler.CreatePermission)
 		permissionRoutes.GET("", handler.GetPermissions)
