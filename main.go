@@ -33,6 +33,8 @@ func main() {
 		log.Println("Warning: .env file not found, using system environment variables.")
 	}
 
+	log.Println(os.Getenv("LIMIT_CONCURRENT_REQUESTS"), "is the limit for concurrent requests in main.go")
+
 	args := os.Args
 	db := config.InitDB()
 	defer db.Close()
@@ -85,7 +87,7 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:         "0.0.0.0:8000",
+		Addr:         "0.0.0.0:" + port,
 		Handler:      r,
 		ReadTimeout:  10 * time.Minute,
 		WriteTimeout: 10 * time.Minute,
