@@ -11,12 +11,11 @@ func RegisterRoutes(r *gin.Engine, redisClient *redis.Client) {
 	service := NewGrafanaService(redisClient)
 	handler := NewGrafanaHandler(service, redisClient)
 
-	
 	r.GET("/api/grafana/view-embed", handler.ViewEmbed)
 
-	
 	grafanaGroup := r.Group("/api/grafana")
 	grafanaGroup.Use(middleware.AuthMiddleware())
+	grafanaGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		grafanaGroup.POST("/generate-embed-url", handler.GenerateEmbedURL)
 	}

@@ -25,6 +25,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	documentRoutes := r.Group("/api/documents")
 
 	documentRoutes.Use(middleware.AuthMiddleware())
+	documentRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		documentRoutes.POST("/batch-upload", handler.BatchUploadDocument)
 		documentRoutes.GET("/batch-status", handler.GetBatchUploadStatus)
@@ -47,7 +48,8 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	}
 
 	crawlerRoutes := r.Group("/api/documents/crawler")
-	crawlerRoutes.Use(middleware.APIKeyMiddleware()) 
+	crawlerRoutes.Use(middleware.APIKeyMiddleware())
+	crawlerRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		crawlerRoutes.POST("/upload", handler.CrawlerBatchUpload)
 	}

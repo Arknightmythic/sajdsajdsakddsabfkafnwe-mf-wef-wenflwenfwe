@@ -34,6 +34,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	helpdeskRoutes := r.Group("/api/helpdesk")
 	helpdeskRoutes.Use(middleware.AuthMiddleware())
+	helpdeskRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		helpdeskRoutes.POST("", handler.CreateHelpdesk)
 		helpdeskRoutes.GET("", handler.GetAll)

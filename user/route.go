@@ -31,6 +31,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 
 	userGroup := r.Group("/api/users")
 	userGroup.Use(middleware.AuthMiddleware())
+	userGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		userGroup.POST("/", handler.CreateUser)
 		userGroup.GET("/", handler.GetUsers)

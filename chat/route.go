@@ -7,6 +7,7 @@ import (
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -40,8 +41,22 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	handler := NewChatHandler(service, externalClient, wsURL, wsToken, *helpdeskService, *messageService)
 
+	defaulChattLimit := 8
+
+	limitChatStr := os.Getenv("LIMITChat_CONCURRENT_CHAT_REQUESTS")
+	if limitChatStr != "" {
+		limitChat, err := strconv.Atoi(limitChatStr)
+		if err != nil || limitChat <= 0 {
+			defaulChattLimit = 8
+		} else {
+			defaulChattLimit = limitChat
+		}
+
+	}
+
 	chatRoutes := r.Group("/api/chat")
 	chatRoutes.Use(middleware.AuthMiddleware())
+	chatRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		chatRoutes.POST("/history", handler.CreateChatHistory)
 		chatRoutes.GET("/history", handler.GetChatHistories)
@@ -63,14 +78,19 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		chatRoutes.PUT(urConversationID, handler.UpdateConversation)
 		chatRoutes.DELETE(urConversationID, handler.DeleteConversation)
 
-		chatRoutes.POST("/ask", handler.Ask)
-		chatRoutes.POST("/validate", handler.ValidateAnswer)
+		limitedRoutes := chatRoutes.Group("")
+		limitedRoutes.Use(middleware.ConcurrencyLimitMiddleware(defaulChattLimit))
+		{
+			limitedRoutes.POST("/ask", handler.Ask)
+		}
 
+		limitedRoutes.POST("/validate", handler.ValidateAnswer)
 		chatRoutes.POST("/feedback", handler.Feedback)
 	}
 
 	apiKeyRoutes := r.Group("/api/chat/multichannel")
 	apiKeyRoutes.Use(middleware.APIKeyMiddleware())
+	apiKeyRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		apiKeyRoutes.POST("/feedback", handler.Feedback)
 		apiKeyRoutes.POST("/ask", handler.Ask)
