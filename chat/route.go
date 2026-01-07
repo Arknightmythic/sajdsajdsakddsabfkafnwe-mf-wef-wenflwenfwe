@@ -41,13 +41,13 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	handler := NewChatHandler(service, externalClient, wsURL, wsToken, *helpdeskService, *messageService)
 
-	defaulChattLimit := 8
+	defaulChattLimit := 12
 
 	limitChatStr := os.Getenv("LIMITChat_CONCURRENT_CHAT_REQUESTS")
 	if limitChatStr != "" {
 		limitChat, err := strconv.Atoi(limitChatStr)
 		if err != nil || limitChat <= 0 {
-			defaulChattLimit = 8
+			defaulChattLimit = 12
 		} else {
 			defaulChattLimit = limitChat
 		}
