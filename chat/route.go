@@ -52,7 +52,6 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		} else {
 			defaulChattLimit = limitChat
 		}
-
 	}
 
 	log.Println(defaulChattLimit, "is the limit for concurrent chat requests")
@@ -63,18 +62,14 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	{
 		chatRoutes.POST("/history", handler.CreateChatHistory)
 		chatRoutes.GET("/history", handler.GetChatHistories)
-
 		chatRoutes.GET("/history/download", handler.DownloadChatHistory)
 		chatRoutes.GET("/history/session/:session_id", handler.GetChatHistoryBySessionID)
-
 		chatRoutes.GET(urlHistoryID, handler.GetChatHistoryByID)
 		chatRoutes.PUT(urlHistoryID, handler.UpdateChatHistory)
 		chatRoutes.DELETE(urlHistoryID, handler.DeleteChatHistory)
-
 		chatRoutes.GET("/pairs/session/:session_id", handler.GetChatPairsBySessionID)
 		chatRoutes.GET("/pairs/all", handler.GetChatPairsBySessionID)
 		chatRoutes.GET("/debug/session/:session_id", handler.DebugChatHistory)
-
 		chatRoutes.POST("/conversations", handler.CreateConversation)
 		chatRoutes.GET("/conversations", handler.GetConversations)
 		chatRoutes.GET(urConversationID, handler.GetConversationByID)
@@ -82,7 +77,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		chatRoutes.DELETE(urConversationID, handler.DeleteConversation)
 
 		limitedRoutes := chatRoutes.Group("")
-		limitedRoutes.Use(middleware.ConcurrencyLimitMiddleware(defaulChattLimit))
+		limitedRoutes.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient))
 		{
 			limitedRoutes.POST("/ask", handler.Ask)
 		}
@@ -96,6 +91,11 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	apiKeyRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		apiKeyRoutes.POST("/feedback", handler.Feedback)
-		apiKeyRoutes.POST("/ask", handler.Ask)
+
+		limitedMultichannel := apiKeyRoutes.Group("")
+		limitedMultichannel.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient))
+		{
+			limitedMultichannel.POST("/ask", handler.Ask)
+		}
 	}
 }
