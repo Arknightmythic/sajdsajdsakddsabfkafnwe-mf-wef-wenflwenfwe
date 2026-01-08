@@ -40,7 +40,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	handler := NewChatHandler(service, externalClient, wsURL, wsToken, *helpdeskService, *messageService)
 
-	defaulChattLimit := 8
+	defaulChattLimit := 3
 
 	limitChat := config.AppConfig.LimitConcurrentChatRequests
 	if limitChat != 0 && limitChat > 0 {
@@ -48,6 +48,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	}
 
 	log.Println(defaulChattLimit, "is the limit for concurrent chat requests")
+	log.Println(config.AppConfig.LimitConcurrentChatRequests, "is the config value for concurrent chat requests")
 
 	chatRoutes := r.Group("/api/chat")
 	chatRoutes.Use(middleware.AuthMiddleware())
