@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	answerValue = "Mohon maaf, saat ini sistem sedang sibuk. Silakan coba kembali beberapa saat lagi."
+	answerValue = "Mohon maaf, saat ini terdapat peningkatan jumlah pesan yang masuk. Silakan kirim ulang pesan Anda beberapa saat lagi. Terimakasih."
 )
 
 type ConcurrencyLimiter struct {

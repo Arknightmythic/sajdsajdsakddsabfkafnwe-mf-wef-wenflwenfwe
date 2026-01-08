@@ -483,7 +483,7 @@ func (h *ChatHandler) handleSendChatError(ctx *gin.Context, err error, platformU
 		if externalResp.Answer != "" {
 			responseAnswer = externalResp.Answer
 		} else {
-			responseAnswer = "Mohon maaf, saat ini sistem sedang sibuk. Silakan coba kembali beberapa saat lagi."
+			responseAnswer = "Mohon maaf, saat ini terdapat peningkatan jumlah pesan yang masuk. Silakan kirim ulang pesan Anda beberapa saat lagi. Terimakasih."
 		}
 
 		questionID = externalResp.QuestionID
