@@ -531,13 +531,13 @@ func (h *ChatHandler) handleSendChatError(ctx *gin.Context, err error, platformU
 		}
 
 		if strings.Contains(errorMsg, "504") || strings.Contains(errorMsg, "timeout") {
-			responseAnswer = "Maaf, sistem sedang mengalami keterlambatan. Permintaan Anda sedang diproses. Mohon coba kirim ulang pesan Anda atau tunggu beberapa saat."
+			responseAnswer = "Mohon maaf, saat ini terdapat peningkatan jumlah pesan yang masuk. Silakan kirim ulang pesan Anda beberapa saat lagi. Terimakasih."
 			log.Println("Treating as 504/timeout - sending timeout message to user")
 		} else if strings.Contains(errorMsg, "external API returned status") {
-			responseAnswer = "Maaf, terjadi gangguan pada sistem. Tim kami sedang menangani masalah ini. Silakan coba lagi dalam beberapa saat."
+			responseAnswer = "Mohon maaf, saat ini terdapat peningkatan jumlah pesan yang masuk. Silakan kirim ulang pesan Anda beberapa saat lagi. Terimakasih."
 			log.Println("External API error - notifying user")
 		} else {
-			responseAnswer = "Maaf, terjadi kesalahan sistem. Permintaan Anda tidak dapat diproses saat ini. Silakan coba lagi atau hubungi administrator."
+			responseAnswer = "Mohon maaf, saat ini terdapat peningkatan jumlah pesan yang masuk. Silakan kirim ulang pesan Anda beberapa saat lagi. Terimakasih."
 			log.Println("Internal system error - notifying user")
 		}
 	}
