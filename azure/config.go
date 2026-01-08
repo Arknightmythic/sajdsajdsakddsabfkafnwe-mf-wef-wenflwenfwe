@@ -1,8 +1,8 @@
 package azure
 
 import (
+	"dokuprime-be/config"
 	"fmt"
-	"os"
 )
 
 type AzureConfig struct {
@@ -20,24 +20,24 @@ type AzureConfig struct {
 }
 
 func NewAzureConfig() *AzureConfig {
-	tenantID := os.Getenv("AZURE_AD_TENANT_ID")
-	backendURI := os.Getenv("BACKEND_URI")
+	tenantID := config.AppConfig.AzureADTenantID
+	backendURI := config.AppConfig.BackendURI
 	if backendURI == "" {
 		backendURI = "http://localhost:8000"
 	}
 
-	redirectPath := os.Getenv("AZURE_AD_REDIRECT_URI")
+	redirectPath := config.AppConfig.AzureADRedirectURI
 	if redirectPath == "" {
 		redirectPath = "/api/authazure/callback"
 	}
-	frontendCallbackURL := os.Getenv("FRONTEND_AZURE_AUTH_CALLBACK_URI")
+	frontendCallbackURL := config.AppConfig.FrontendAzureAuthCallbackURI
 	if frontendCallbackURL == "" {
 		frontendCallbackURL = "http://localhost:5173/auth-microsoft/callback"
 	}
 
 	return &AzureConfig{
-		ClientID:            os.Getenv("AZURE_AD_CLIENT_ID"),
-		ClientSecret:        os.Getenv("AZURE_AD_CLIENT_SECRET"),
+		ClientID:            config.AppConfig.AzureADClientID,
+		ClientSecret:        config.AppConfig.AzureADClientSecret,
 		TenantID:            tenantID,
 		Authority:           fmt.Sprintf("https://login.microsoftonline.com/%s", tenantID),
 		RedirectURI:         backendURI + redirectPath,
@@ -51,7 +51,7 @@ func NewAzureConfig() *AzureConfig {
 }
 
 func getDefaultTeam() string {
-	team := os.Getenv("DEFAULT_TEAM")
+	var team = config.AppConfig.DefaultTeam
 	if team == "" {
 		return "finance"
 	}

@@ -2,10 +2,10 @@ package grafana
 
 import (
 	"context"
+	"dokuprime-be/config"
 	"dokuprime-be/util"
 	"fmt"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -24,16 +24,15 @@ func NewGrafanaService(redisClient *redis.Client) *GrafanaService {
 func (s *GrafanaService) GenerateEmbedURL(req *GenerateEmbedRequest) (string, error) {
 	var baseURL string
 
-	
 	switch req.Category {
 	case "daily":
-		baseURL = os.Getenv("GRAFANA_EMBED_DAILY_URL")
+		baseURL = config.AppConfig.GrafanaEmbedDailyURL
 	case "monthly":
-		baseURL = os.Getenv("GRAFANA_EMBED_MONTHLY_URL")
+		baseURL = config.AppConfig.GrafanaEmbedMonthlyURL
 	case "yearly":
-		baseURL = os.Getenv("GRAFANA_EMBED_YEARLY_URL")
+		baseURL = config.AppConfig.GrafanaEmbedYearlyURL
 	case "custom":
-		baseURL = os.Getenv("GRAFANA_EMBED_CUSTOM_URL")
+		baseURL = config.AppConfig.GrafanaEmbedDailyURL
 		if req.StartDate == "" || req.EndDate == "" {
 			return "", fmt.Errorf("start_date and end_date are required for custom category")
 		}
@@ -56,15 +55,15 @@ func (s *GrafanaService) GenerateEmbedURL(req *GenerateEmbedRequest) (string, er
 	queryParams.Set("timezone", "browser")
 	switch req.Category {
 	case "daily":
-		
+
 		queryParams.Set("from", "now/d")
 		queryParams.Set("to", "now")
 	case "monthly":
-		
+
 		queryParams.Set("from", "now/M")
 		queryParams.Set("to", "now")
 	case "yearly":
-		
+
 		queryParams.Set("from", "now/y")
 		queryParams.Set("to", "now")
 	case "custom":
@@ -91,7 +90,6 @@ func (s *GrafanaService) GenerateEmbedURL(req *GenerateEmbedRequest) (string, er
 	return token, nil
 }
 
-
 func parseCustomDatesToUTC(startDateStr, endDateStr string) (string, string, error) {
 	layout := "2006-01-02"
 	loc := time.FixedZone("WIB", 7*60*60)
@@ -99,7 +97,7 @@ func parseCustomDatesToUTC(startDateStr, endDateStr string) (string, string, err
 	if err != nil {
 		return "", "", fmt.Errorf("invalid start_date format: %w", err)
 	}
-	
+
 	tEnd, err := time.ParseInLocation(layout, endDateStr, loc)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid end_date format: %w", err)

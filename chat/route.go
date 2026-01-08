@@ -7,8 +7,6 @@ import (
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
 	"log"
-	"os"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -28,12 +26,12 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	helpdeskService := helpdesk.NewHelpdeskService(helpdesk.NewHelpdeskRepository(db))
 
-	wsURL := os.Getenv("WEBSOCKET_URL")
+	wsURL := config.AppConfig.WebSocketURL
 	if wsURL == "" {
 		wsURL = "ws://localhost:8080"
 	}
 
-	wsToken := os.Getenv("WEBSOCKET_SECRET_KEY")
+	wsToken := config.AppConfig.WebSocketSecretKey
 	if wsToken == "" {
 		wsToken = "bkpm-jaya-jaya-jaya"
 	}
@@ -44,14 +42,9 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	defaulChattLimit := 8
 
-	limitChatStr := os.Getenv("LIMIT_CONCURRENT_CHAT_REQUESTS")
-	if limitChatStr != "" {
-		limitChat, err := strconv.Atoi(limitChatStr)
-		if err != nil || limitChat <= 0 {
-			defaulChattLimit = 8
-		} else {
-			defaulChattLimit = limitChat
-		}
+	limitChat := config.AppConfig.LimitConcurrentChatRequests
+	if limitChat != 0 && limitChat > 0 {
+		defaulChattLimit = limitChat
 	}
 
 	log.Println(defaulChattLimit, "is the limit for concurrent chat requests")

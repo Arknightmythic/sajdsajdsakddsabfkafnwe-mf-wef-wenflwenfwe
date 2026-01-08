@@ -215,7 +215,7 @@ func (c *Client) ExtractDocument(req ExtractRequest) error {
 	}
 
 	httpReq.Header.Set(isContentType, writer.FormDataContentType())
-	httpReq.Header.Set(isXAPI, os.Getenv("X_API_KEY"))
+	httpReq.Header.Set(isXAPI, config.AppConfig.XAPIKey)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -239,7 +239,7 @@ func (c *Client) DeleteDocument(req DeleteRequest) error {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
 
-	httpReq.Header.Set(isXAPI, os.Getenv("X_API_KEY"))
+	httpReq.Header.Set(isXAPI, config.AppConfig.XAPIKey)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -269,7 +269,7 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	}
 
 	httpReq.Header.Set(isContentType, "application/json")
-	httpReq.Header.Set(isXAPI, os.Getenv("X_API_KEY"))
+	httpReq.Header.Set(isXAPI, config.AppConfig.XAPIKey)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -330,7 +330,7 @@ func (c *Client) SendMessageToAPI(data interface{}) error {
 	}
 
 	httpReq.Header.Set(isContentType, "application/json")
-	httpReq.Header.Set(isXAPI, os.Getenv("MESSAGES_API_KEY"))
+	httpReq.Header.Set(isXAPI, config.AppConfig.XAPIKey)
 
 	log.Println("MESSAGE API KEY -> ", c.messagesURL+"/api/send/reply")
 

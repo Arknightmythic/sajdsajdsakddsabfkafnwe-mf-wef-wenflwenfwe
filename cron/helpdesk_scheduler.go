@@ -1,9 +1,8 @@
 package cron
 
 import (
+	"dokuprime-be/config"
 	"log"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -20,12 +19,7 @@ func NewHelpdeskScheduler(db *sqlx.DB) *HelpdeskScheduler {
 }
 
 func (h *HelpdeskScheduler) UpdateQueuedToPending() {
-	periodStr := os.Getenv("HELPDESK_QUEUE_PERIOD_MINUTES")
-	period, err := strconv.Atoi(periodStr)
-	if err != nil || period <= 0 {
-		period = 15
-		log.Printf("Using default period: %d minutes", period)
-	}
+	period := config.AppConfig.HelpdeskQueuePeriodMinutes
 
 	threshold := time.Now().UTC().Add(-time.Duration(period) * time.Minute)
 	query := `

@@ -3,10 +3,9 @@ package middleware
 import (
 	"log"
 	"net/http"
-	"os"
-	"strconv"
 	"sync"
 
+	"dokuprime-be/config"
 	"dokuprime-be/external"
 	"dokuprime-be/util"
 
@@ -57,13 +56,8 @@ func (cl *ConcurrencyLimiter) GetCurrent() int {
 func getConcurrencyLimit() int {
 	defaultLimit := 150
 
-	limitStr := os.Getenv("LIMIT_CONCURRENT_REQUESTS")
-	if limitStr == "" {
-		return defaultLimit
-	}
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
+	limit := config.AppConfig.LimitConcurrentRequests
+	if limit == 0 {
 		return defaultLimit
 	}
 

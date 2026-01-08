@@ -4,17 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 
 	"github.com/redis/go-redis/v9"
 )
 
 func InitRedis() *redis.Client {
-	host := os.Getenv("REDIS_HOST")
-	port := os.Getenv("REDIS_PORT")
-	password := os.Getenv("REDIS_PASSWORD")
-	dbStr := os.Getenv("REDIS_DB")
+	host := AppConfig.RedisHost
+	port := AppConfig.RedisPort
+	password := AppConfig.RedisPassword
+	dbStr := AppConfig.RedisDB
 
 	if host == "" {
 		host = "localhost"

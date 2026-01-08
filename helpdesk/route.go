@@ -5,7 +5,6 @@ import (
 	"dokuprime-be/external"
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -18,12 +17,12 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	externalAPIConfig := config.LoadExternalAPIConfig()
 	externalClient := external.NewClient(externalAPIConfig)
 
-	wsURL := os.Getenv("WEBSOCKET_URL")
+	wsURL := config.AppConfig.WebSocketURL
 	if wsURL == "" {
 		wsURL = "ws://localhost:8080"
 	}
 
-	wsToken := os.Getenv("WEBSOCKET_SECRET_KEY")
+	wsToken := config.AppConfig.WebSocketSecretKey
 	if wsToken == "" {
 		wsToken = "bkpm-jaya-jaya-jaya"
 	}

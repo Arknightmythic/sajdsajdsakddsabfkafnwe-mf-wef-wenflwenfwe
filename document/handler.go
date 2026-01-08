@@ -69,15 +69,13 @@ func (h *DocumentHandler) GenerateViewURL(ctx *gin.Context) {
 
 	isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
 
-	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-		isSecure = envSecure == "true"
-	}
+	isSecure = config.AppConfig.CookieSecure == true
 
-	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
-	domain := os.Getenv("COOKIE_DOMAIN")
+	httpOnly := config.AppConfig.CookieHTTPOnly
+	domain := config.AppConfig.CookieDomain
 	path := "/api/documents/view-file"
 
-	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	sameSiteEnv := config.AppConfig.CookieSameSite
 	ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
 
 	ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
@@ -110,15 +108,14 @@ func (h *DocumentHandler) GenerateViewURLByID(ctx *gin.Context) {
 	}
 
 	isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
-	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-		isSecure = envSecure == "true"
-	}
+
+	isSecure = config.AppConfig.CookieSecure == true
 
 	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
-	domain := os.Getenv("COOKIE_DOMAIN")
+	domain := config.AppConfig.CookieDomain
 	path := "/api/documents/view-file"
 
-	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	sameSiteEnv := config.AppConfig.CookieSameSite
 	ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
 
 	ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
@@ -142,7 +139,7 @@ func (h *DocumentHandler) ViewDocument(ctx *gin.Context) {
 		return
 	}
 
-	domain := os.Getenv("COOKIE_DOMAIN")
+	domain := config.AppConfig.CookieDomain
 	path := "/api/documents/view-file"
 
 	ctx.SetCookie(viewTokenCookieName, "", -1, path, domain, false, true)
@@ -282,10 +279,8 @@ func (h *DocumentHandler) UploadDocument(ctx *gin.Context) {
 func (h *DocumentHandler) getUploadConfig() (int, map[string]bool) {
 	validTypes := map[string]bool{"pdf": true, "txt": true}
 
-	maxFileSizeFromEnv, err := strconv.Atoi(os.Getenv("MAX_FILE_SIZE_ALLOWED"))
-	if err != nil {
-		maxFileSizeFromEnv = 100
-	}
+	maxFileSizeFromEnv := int(config.AppConfig.MaxFileSizeAllowed)
+
 	maxFileSize := maxFileSizeFromEnv * 1024 * 1024
 	return maxFileSize, validTypes
 }
@@ -828,18 +823,16 @@ func (h *DocumentHandler) GenerateViewURLByDocumentID(ctx *gin.Context) {
 
 	isSecure := ctx.Request.TLS != nil || ctx.Request.Header.Get("X-Forwarded-Proto") == "https"
 
-	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-		isSecure = envSecure == "true"
-	}
+	isSecure = config.AppConfig.CookieSecure == true
 
 	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
-	domain := os.Getenv("COOKIE_DOMAIN")
+	domain := config.AppConfig.CookieDomain
 	path := "/api/documents/view-file"
 	if path == "" {
 		path = "/api/documents/view-file"
 	}
 
-	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	sameSiteEnv := config.AppConfig.CookieSameSite
 	ctx.SetSameSite(getSameSiteMode(sameSiteEnv))
 
 	ctx.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
