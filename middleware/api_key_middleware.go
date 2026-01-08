@@ -3,6 +3,7 @@ package middleware
 import (
 	"dokuprime-be/config"
 	"dokuprime-be/util"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -19,6 +20,9 @@ func APIKeyMiddleware() gin.HandlerFunc {
 		}
 
 		expectedAPIKey := config.AppConfig.XAPIKey
+		log.Println(apiKey, "is the expected API key")
+		log.Println(expectedAPIKey, "is the provided API key")
+
 		if expectedAPIKey == "" {
 			util.ErrorResponse(c, http.StatusInternalServerError, "API key not configured")
 			c.Abort()
