@@ -56,6 +56,10 @@ func (cl *ConcurrencyLimiter) GetCurrent() int {
 func getConcurrencyLimit() int {
 	defaultLimit := 150
 
+	if config.AppConfig == nil {
+		return defaultLimit
+	}
+
 	limit := config.AppConfig.LimitConcurrentRequests
 	if limit == 0 {
 		return defaultLimit
@@ -64,13 +68,22 @@ func getConcurrencyLimit() int {
 	return limit
 }
 
-var globalLimiter = NewConcurrencyLimiter(getConcurrencyLimit())
+var (
+	globalLimiter     *ConcurrencyLimiter
+	globalLimiterOnce sync.Once
+)
+
+func getGlobalLimiter() *ConcurrencyLimiter {
+	globalLimiterOnce.Do(func() {
+		globalLimiter = NewConcurrencyLimiter(getConcurrencyLimit())
+	})
+	return globalLimiter
+}
 
 func ConcurrencyLimitMiddleware(limit int) gin.HandlerFunc {
 	limiter := NewConcurrencyLimiter(limit)
 
 	return func(c *gin.Context) {
-
 		if !limiter.Acquire() {
 			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
 			c.Abort()
@@ -78,12 +91,13 @@ func ConcurrencyLimitMiddleware(limit int) gin.HandlerFunc {
 		}
 		defer limiter.Release()
 
-		if !globalLimiter.Acquire() {
+		gl := getGlobalLimiter()
+		if !gl.Acquire() {
 			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
 			c.Abort()
 			return
 		}
-		defer globalLimiter.Release()
+		defer gl.Release()
 
 		c.Next()
 	}
@@ -91,12 +105,13 @@ func ConcurrencyLimitMiddleware(limit int) gin.HandlerFunc {
 
 func GlobalConcurrencyLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !globalLimiter.Acquire() {
+		gl := getGlobalLimiter()
+		if !gl.Acquire() {
 			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
 			c.Abort()
 			return
 		}
-		defer globalLimiter.Release()
+		defer gl.Release()
 
 		c.Next()
 	}
@@ -106,9 +121,9 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client) 
 	limiter := NewConcurrencyLimiter(limit)
 
 	return func(c *gin.Context) {
+		gl := getGlobalLimiter()
 
-		if !limiter.Acquire() || !globalLimiter.Acquire() {
-
+		if !limiter.Acquire() || !gl.Acquire() {
 			var req struct {
 				Platform         string `json:"platform"`
 				PlatformUniqueID string `json:"platform_unique_id"`
@@ -117,7 +132,6 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client) 
 			}
 
 			if err := c.ShouldBindJSON(&req); err == nil {
-
 				if req.Platform != "web" && req.Platform != "" {
 					busyResponse := map[string]interface{}{
 						"user":               req.PlatformUniqueID,
@@ -151,7 +165,7 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client) 
 
 		defer func() {
 			limiter.Release()
-			globalLimiter.Release()
+			gl.Release()
 		}()
 
 		c.Next()
