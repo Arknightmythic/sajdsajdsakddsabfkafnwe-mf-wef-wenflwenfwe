@@ -114,7 +114,7 @@ func LoadConfig() *Config {
 
 		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
 		BcryptSalt:     getEnv("BCRYPT_SALT", "dokuprime-jaya-jaya-jaya"),
-		XAPIKey:        getEnv("X_API_KEY", "BangJumAwesome"),
+		XAPIKey:        getEnv("X_API_KEY", "TestDeployDevBaruENV"),
 
 		SuperadminPassword: getEnv("SUPERADMIN_PASSWORD", "superadmin"),
 
