@@ -7,6 +7,7 @@ import (
 	"dokuprime-be/helpdesk"
 	"dokuprime-be/messaging"
 	"dokuprime-be/util"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -433,8 +434,9 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 	resp, err := h.externalClient.SendChatMessage(chatReq)
 	if err != nil {
-		log.Println("Line 307", err)
-		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		log.Println("Line 307 - SendChatMessage error:", err)
+
+		h.handleSendChatError(ctx, err, req.PlatformUniqueID, req.Query, req.ConversationID, req.Platform, req.StartTimestamp, conversation)
 		return
 	}
 
@@ -448,6 +450,145 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 	responseAsk := h.processAskResponseData(finalConversation, resp)
 	util.SuccessResponse(ctx, "Message sent successfully", responseAsk)
 	h.broadcastAskResponse(ctx, finalConversation, responseAsk)
+}
+
+func (h *ChatHandler) handleSendChatError(ctx *gin.Context, err error, platformUniqueID, query, conversationID, platform, startTimestamp string, conversation *Conversation) {
+
+	errorMsg := err.Error()
+	log.Printf("Handling SendChatMessage error: %s", errorMsg)
+
+	var externalResp external.ChatResponse
+	var isExternalJSON bool
+
+	if strings.Contains(errorMsg, "{") {
+		startIdx := strings.Index(errorMsg, "{")
+		jsonStr := errorMsg[startIdx:]
+		if err := json.Unmarshal([]byte(jsonStr), &externalResp); err == nil {
+			isExternalJSON = true
+			log.Println("✅ Successfully parsed external API JSON response from error")
+			log.Printf("Parsed conversation_id: %s, answer: %s", externalResp.ConversationID, externalResp.Answer)
+		}
+	}
+
+	var responseAnswer string
+	var conversationIDForResponse string
+	var questionID int
+	var answerID int
+
+	if isExternalJSON && externalResp.ConversationID != "" {
+		log.Println("Using data from external API JSON response")
+
+		conversationIDForResponse = externalResp.ConversationID
+
+		if externalResp.Answer != "" {
+			responseAnswer = externalResp.Answer
+		} else {
+			responseAnswer = "Mohon maaf, saat ini terdapat peningkatan jumlah pesan yang masuk. Silakan kirim ulang pesan Anda beberapa saat lagi. Terimakasih."
+		}
+
+		questionID = externalResp.QuestionID
+		answerID = externalResp.AnswerID
+
+		if conversation == nil {
+			parsedUUID, err := uuid.Parse(externalResp.ConversationID)
+			if err == nil {
+
+				existingConv, err := h.service.GetConversationByID(parsedUUID)
+				if err == nil && existingConv != nil {
+					conversation = existingConv
+					log.Printf("Found existing conversation: %s", parsedUUID.String())
+				} else {
+
+					conversation = &Conversation{
+						ID:               parsedUUID,
+						StartTimestamp:   time.Now(),
+						Platform:         platform,
+						PlatformUniqueID: platformUniqueID,
+						IsHelpdesk:       false,
+						Context:          nil,
+					}
+					if err := h.service.CreateConversation(conversation); err != nil {
+						log.Printf("Warning: Failed to create conversation from external response: %v", err)
+					} else {
+						log.Printf("Created new conversation from external response: %s", parsedUUID.String())
+					}
+				}
+			}
+		}
+
+	} else {
+
+		log.Println("No valid external JSON, using fallback error handling")
+
+		conversationIDForResponse = conversationID
+		if conversation != nil {
+			conversationIDForResponse = conversation.ID.String()
+		} else if conversationIDForResponse == "" {
+
+			newUUID := uuid.New()
+			conversationIDForResponse = newUUID.String()
+			log.Printf("Generated new conversation ID: %s", conversationIDForResponse)
+		}
+
+		if strings.Contains(errorMsg, "504") || strings.Contains(errorMsg, "timeout") {
+			responseAnswer = "Maaf, sistem sedang mengalami keterlambatan. Permintaan Anda sedang diproses. Mohon coba kirim ulang pesan Anda atau tunggu beberapa saat."
+			log.Println("Treating as 504/timeout - sending timeout message to user")
+		} else if strings.Contains(errorMsg, "external API returned status") {
+			responseAnswer = "Maaf, terjadi gangguan pada sistem. Tim kami sedang menangani masalah ini. Silakan coba lagi dalam beberapa saat."
+			log.Println("External API error - notifying user")
+		} else {
+			responseAnswer = "Maaf, terjadi kesalahan sistem. Permintaan Anda tidak dapat diproses saat ini. Silakan coba lagi atau hubungi administrator."
+			log.Println("Internal system error - notifying user")
+		}
+	}
+
+	errorResponseAsk := ResponseAsk{
+		User:             platformUniqueID,
+		ConversationID:   conversationIDForResponse,
+		Query:            query,
+		RewrittenQuery:   "",
+		Category:         "",
+		QuestionCategory: []string{},
+		Answer:           responseAnswer,
+		Citations:        external.FlexibleCitationArray{},
+		IsHelpdesk:       false,
+		IsAnswered:       boolPtr(false),
+		Platform:         platform,
+		PlatformUniqueID: platformUniqueID,
+		QuestionID:       questionID,
+		AnswerID:         answerID,
+	}
+
+	util.SuccessResponse(ctx, "Error occurred, user notified", errorResponseAsk)
+
+	log.Printf("Broadcasting error response to user via %s", platform)
+
+	var finalConv *Conversation
+	if conversation != nil {
+		finalConv = conversation
+	} else {
+
+		parsedUUID, err := uuid.Parse(conversationIDForResponse)
+		if err != nil {
+			parsedUUID = uuid.New()
+			log.Printf("Failed to parse conversation ID, generated new: %s", parsedUUID.String())
+		}
+
+		finalConv = &Conversation{
+			ID:               parsedUUID,
+			Platform:         platform,
+			PlatformUniqueID: platformUniqueID,
+			StartTimestamp:   time.Now(),
+			IsHelpdesk:       false,
+		}
+	}
+
+	h.broadcastAskResponse(ctx, finalConv, errorResponseAsk)
+	log.Printf("✅ Successfully broadcasted error response with conversation_id: %s", conversationIDForResponse)
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 func (h *ChatHandler) ensureWebSocketConnection() {

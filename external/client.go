@@ -16,9 +16,9 @@ import (
 
 const (
 	isFailedToRequest = "failed to create request: %w"
-	isContentType = "Content-Type"
-	isXAPI = "X-API-Key"
-	isFailedToSend = "failed to send request: %w"
+	isContentType     = "Content-Type"
+	isXAPI            = "X-API-Key"
+	isFailedToSend    = "failed to send request: %w"
 )
 
 type Client struct {
@@ -275,12 +275,21 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf(isFailedToSend, err)
 	}
-
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusGatewayTimeout || resp.StatusCode == http.StatusServiceUnavailable {
+
+		var jsonResp map[string]interface{}
+		if json.Unmarshal(bodyBytes, &jsonResp) == nil {
+			jsonBytes, _ := json.Marshal(jsonResp)
+			return nil, fmt.Errorf("external API returned status %d: %s", resp.StatusCode, string(jsonBytes))
+		}
+		return nil, fmt.Errorf("external API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {

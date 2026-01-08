@@ -1,14 +1,19 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"dokuprime-be/config"
+	"dokuprime-be/external"
 	"dokuprime-be/util"
 
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	answerValue = "Mohon maaf, saat ini terdapat peningkatan jumlah pesan yang masuk. Silakan kirim ulang pesan Anda beberapa saat lagi. Terimakasih."
 )
 
 type ConcurrencyLimiter struct {
@@ -67,14 +72,14 @@ func ConcurrencyLimitMiddleware(limit int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		if !limiter.Acquire() {
-			util.ErrorResponse(c, http.StatusTooManyRequests, "Sistem sedang sibuk")
+			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
 			c.Abort()
 			return
 		}
 		defer limiter.Release()
 
 		if !globalLimiter.Acquire() {
-			util.ErrorResponse(c, http.StatusTooManyRequests, "Sistem sedang sibuk")
+			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
 			c.Abort()
 			return
 		}
@@ -87,11 +92,67 @@ func ConcurrencyLimitMiddleware(limit int) gin.HandlerFunc {
 func GlobalConcurrencyLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !globalLimiter.Acquire() {
-			util.ErrorResponse(c, http.StatusTooManyRequests, "Sistem sedang sibuk")
+			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
 			c.Abort()
 			return
 		}
 		defer globalLimiter.Release()
+
+		c.Next()
+	}
+}
+
+func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client) gin.HandlerFunc {
+	limiter := NewConcurrencyLimiter(limit)
+
+	return func(c *gin.Context) {
+
+		if !limiter.Acquire() || !globalLimiter.Acquire() {
+
+			var req struct {
+				Platform         string `json:"platform"`
+				PlatformUniqueID string `json:"platform_unique_id"`
+				Query            string `json:"query"`
+				ConversationID   string `json:"conversation_id"`
+			}
+
+			if err := c.ShouldBindJSON(&req); err == nil {
+
+				if req.Platform != "web" && req.Platform != "" {
+					busyResponse := map[string]interface{}{
+						"user":               req.PlatformUniqueID,
+						"conversation_id":    req.ConversationID,
+						"query":              req.Query,
+						"rewritten_query":    "",
+						"category":           "",
+						"question_category":  []string{},
+						"answer":             answerValue,
+						"citations":          []interface{}{},
+						"is_helpdesk":        false,
+						"is_answered":        false,
+						"platform":           req.Platform,
+						"platform_unique_id": req.PlatformUniqueID,
+						"question_id":        0,
+						"answer_id":          0,
+					}
+
+					if err := externalClient.SendMessageToAPI(busyResponse); err != nil {
+						log.Printf("Failed to send busy notification: %v", err)
+					} else {
+						log.Printf("✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
+					}
+				}
+			}
+
+			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
+			c.Abort()
+			return
+		}
+
+		defer func() {
+			limiter.Release()
+			globalLimiter.Release()
+		}()
 
 		c.Next()
 	}
