@@ -1,8 +1,8 @@
 package auth
 
 import (
+	"dokuprime-be/config"
 	"errors"
-	"os"
 	"strconv"
 	"time"
 
@@ -18,11 +18,11 @@ type JWTClaims struct {
 }
 
 func GenerateAccessToken(userID int64, name, email, accountType string) (string, error) {
-	expiryStr := os.Getenv("JWT_ACCESS_EXPIRY")
+	expiryStr := config.AppConfig.JWTAccessExpiry
 	if expiryStr == "" {
 		expiryStr = "15m"
 	}
-	
+
 	expiry, _ := time.ParseDuration(expiryStr)
 
 	claims := JWTClaims{
@@ -37,12 +37,12 @@ func GenerateAccessToken(userID int64, name, email, accountType string) (string,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	secret := os.Getenv("JWT_SECRET")
+	secret := config.AppConfig.JWTSecret
 	return token.SignedString([]byte(secret))
 }
 
 func GenerateRefreshToken(userID int64) (string, error) {
-	expiryStr := os.Getenv("JWT_REFRESH_EXPIRY")
+	expiryStr := config.AppConfig.JWTRefreshExpiry
 	if expiryStr == "" {
 		expiryStr = "168h"
 	}
@@ -58,7 +58,7 @@ func GenerateRefreshToken(userID int64) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	secret := os.Getenv("JWT_SECRET")
+	secret := config.AppConfig.JWTSecret
 	return token.SignedString([]byte(secret))
 }
 
@@ -67,7 +67,7 @@ func ValidateToken(tokenString string) (*JWTClaims, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return []byte(os.Getenv("JWT_SECRET")), nil
+		return []byte(config.AppConfig.JWTSecret), nil
 	})
 
 	if err != nil {

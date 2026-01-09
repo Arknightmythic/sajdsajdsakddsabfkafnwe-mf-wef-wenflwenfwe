@@ -2,6 +2,7 @@ package grafana
 
 import (
 	"context"
+	"dokuprime-be/config"
 	"dokuprime-be/util"
 	"fmt"
 	"net/http"
@@ -44,16 +45,15 @@ func (h *GrafanaHandler) GenerateEmbedURL(c *gin.Context) {
 	}
 
 	isSecure := c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https"
-	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-		isSecure = envSecure == "true"
-	}
 
-	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
-	domain := os.Getenv("COOKIE_DOMAIN")
+	isSecure = config.AppConfig.CookieSecure == true
+
+	httpOnly := config.AppConfig.CookieHTTPOnly
+	domain := config.AppConfig.CookieDomain
 
 	path := "/api/grafana/view-embed"
 
-	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	sameSiteEnv := config.AppConfig.CookieSameSite
 	c.SetSameSite(getSameSiteMode(sameSiteEnv))
 
 	c.SetCookie(grafanaCookieName, token, 60, path, domain, isSecure, httpOnly)
@@ -78,8 +78,8 @@ func (h *GrafanaHandler) ViewEmbed(c *gin.Context) {
 		return
 	}
 
-	domain := os.Getenv("COOKIE_DOMAIN")
-	path := os.Getenv("COOKIE_PATH")
+	domain := config.AppConfig.CookieDomain
+	path := config.AppConfig.CookiePath
 	if path == "" {
 		path = "/api/grafana/view-embed"
 	}

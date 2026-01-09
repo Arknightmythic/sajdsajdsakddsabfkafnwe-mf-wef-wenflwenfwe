@@ -6,7 +6,7 @@ import (
 )
 
 func GetUploadPath() string {
-	uploadPath := os.Getenv("UPLOAD_PATH")
+	uploadPath := AppConfig.UploadPath
 	if uploadPath == "" {
 		uploadPath = "./uploads/documents"
 	}

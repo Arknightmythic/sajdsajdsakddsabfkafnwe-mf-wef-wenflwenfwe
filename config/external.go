@@ -1,9 +1,5 @@
 package config
 
-import (
-	"os"
-)
-
 type ExternalAPIConfig struct {
 	BaseURL        string
 	APIKey         string
@@ -12,22 +8,22 @@ type ExternalAPIConfig struct {
 }
 
 func LoadExternalAPIConfig() *ExternalAPIConfig {
-	baseURL := os.Getenv("EXTERNAL_API_BASE_URL")
+	baseURL := AppConfig.ExternalAPIBaseURL
 	if baseURL == "" {
 		baseURL = "http://172.16.12.98:9534"
 	}
 
-	apiKey := os.Getenv("X_API_KEY")
+	apiKey := AppConfig.XAPIKey
 	if apiKey == "" {
 		apiKey = "BangJumAwesome"
 	}
 
-	messagesAPIURL := os.Getenv("MESSAGES_API_URL")
+	messagesAPIURL := AppConfig.MessagesAPIURL
 	if messagesAPIURL == "" {
 		messagesAPIURL = "http://localhost:9798"
 	}
 
-	messagesAPIKey := os.Getenv("MESSAGES_API_KEY")
+	messagesAPIKey := AppConfig.MessagesAPIKey
 	if messagesAPIKey == "" {
 		messagesAPIKey = "BangJorAwesome"
 	}

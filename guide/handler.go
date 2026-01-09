@@ -171,16 +171,14 @@ func (h *GuideHandler) GenerateViewURL(c *gin.Context) {
 
 	
 	isSecure := c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https"
-	if envSecure := os.Getenv("COOKIE_SECURE"); envSecure != "" {
-		isSecure = envSecure == "true"
-	}
-
+	
+	isSecure = config.AppConfig.CookieSecure == true
 	
 	httpOnly := getEnvBool("COOKIE_HTTP_ONLY", true)
-	domain := os.Getenv("COOKIE_DOMAIN")
+	domain := config.AppConfig.CookieDomain
 	path := "/api/guides/view-file"
 	
-	sameSiteEnv := os.Getenv("COOKIE_SAME_SITE")
+	sameSiteEnv := config.AppConfig.CookieSameSite
 	c.SetSameSite(getSameSiteMode(sameSiteEnv))
 	c.SetCookie(viewTokenCookieName, token, 300, path, domain, isSecure, httpOnly)
 
@@ -208,8 +206,8 @@ func (h *GuideHandler) ViewFile(c *gin.Context) {
 
 	
 	
-	domain := os.Getenv("COOKIE_DOMAIN")
-	path := os.Getenv("COOKIE_PATH")
+	domain := config.AppConfig.CookieDomain
+	path := config.AppConfig.CookiePath
 	if path == "" {
 		path = "/api/guides/view-file"
 	}
