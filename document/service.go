@@ -305,40 +305,36 @@ func (s *DocumentService) ExecuteHardDelete(documentID int) error {
 }
 
 func (s *DocumentService) DeleteDocument(documentID int) error {
-    details, err := s.repo.GetDocumentDetailsByDocumentID(documentID)
-    if err != nil || len(details) == 0 {
-        return fmt.Errorf("dokumen tidak ditemukan")
-    }
+	details, err := s.repo.GetDocumentDetailsByDocumentID(documentID)
+	if err != nil || len(details) == 0 {
+		return fmt.Errorf("dokumen tidak ditemukan")
+	}
 
-    var activeDetail *DocumentDetail
-    for _, d := range details {
-        if d.IsLatest != nil && *d.IsLatest && d.Status != nil && *d.Status == "Approved" {
-            activeDetail = &d
-            break
-        }
-    }
+	var activeDetail *DocumentDetail
+	for _, d := range details {
+		if d.IsLatest != nil && *d.IsLatest && d.Status != nil && *d.Status == "Approved" {
+			activeDetail = &d
+			break
+		}
+	}
 
-    
-    
-    if activeDetail != nil {
-        log.Printf("Mengajukan request delete untuk dokumen ID %d (Active Detail ID: %d)", documentID, activeDetail.ID)
-        return s.RequestDelete(documentID)
-    }
+	if activeDetail != nil {
+		log.Printf("Mengajukan request delete untuk dokumen ID %d (Active Detail ID: %d)", documentID, activeDetail.ID)
+		return s.RequestDelete(documentID)
+	}
 
-    
-    
-    latest := details[0]
+	latest := details[0]
 
-    isRejected := latest.Status != nil && *latest.Status == "Rejected"
-    isPendingNew := latest.Status != nil && *latest.Status == "Pending" &&
-        latest.RequestType != nil && *latest.RequestType == "NEW"
+	isRejected := latest.Status != nil && *latest.Status == "Rejected"
+	isPendingNew := latest.Status != nil && *latest.Status == "Pending" &&
+		latest.RequestType != nil && *latest.RequestType == "NEW"
 
-    if isPendingNew || isRejected {
-        log.Printf("Menghapus permanen dokumen ID %d", documentID)
-        return s.ExecuteHardDelete(documentID)
-    }
+	if isPendingNew || isRejected {
+		log.Printf("Menghapus permanen dokumen ID %d", documentID)
+		return s.ExecuteHardDelete(documentID)
+	}
 
-    return fmt.Errorf("dokumen tidak dapat dihapus dalam status saat ini")
+	return fmt.Errorf("dokumen tidak dapat dihapus dalam status saat ini")
 }
 
 func GenerateUniqueFilename(originalFilename string) string {
@@ -486,10 +482,8 @@ func (s *DocumentService) prepareBatchEnv(batchID string) (string, int, map[stri
 
 	validTypes := map[string]bool{"pdf": true, "docx": true, "txt": true, "doc": true}
 
-	maxFileSizeFromEnv, err := strconv.Atoi(os.Getenv("MAX_FILE_SIZE_ALLOWED"))
-	if err != nil {
-		maxFileSizeFromEnv = 100
-	}
+	maxFileSizeFromEnv := int(config.AppConfig.MaxFileSizeAllowed)
+
 	maxFileSize := maxFileSizeFromEnv * 1024 * 1024
 
 	return uploadDir, maxFileSize, validTypes, nil
@@ -816,7 +810,7 @@ func (s *DocumentService) shouldReplaceDocument(doc *DocumentDetail) bool {
 
 func (s *DocumentService) deleteOldDocument(doc *DocumentDetail, uploadDir string) error {
 	oldFilePath := filepath.Join(uploadDir, doc.Filename)
-	_ = os.Remove(oldFilePath) 
+	_ = os.Remove(oldFilePath)
 
 	return s.DeleteDocument(doc.DocumentID)
 }

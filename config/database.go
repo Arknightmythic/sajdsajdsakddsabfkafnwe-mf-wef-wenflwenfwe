@@ -3,20 +3,19 @@ package config
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
 
 func InitDB() *sqlx.DB {
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-	dbDriver := os.Getenv("DB_DRIVER")
-	dbSchema := os.Getenv("DB_SCHEMA")
+	dbHost := AppConfig.DBHost
+	dbPort := AppConfig.DBPort
+	dbUser := AppConfig.DBUser
+	dbPassword := AppConfig.DBPassword
+	dbName := AppConfig.DBName
+	dbDriver := AppConfig.DBDriver
+	dbSchema := AppConfig.DBSchema
 
 	defaultDSN := fmt.Sprintf("postgres://%s:%s@%s:%s/postgres?sslmode=disable",
 		dbUser, dbPassword, dbHost, dbPort)

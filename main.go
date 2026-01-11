@@ -25,13 +25,10 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: .env file not found, using system environment variables.")
-	}
+	cfg := config.LoadConfig()
 
 	args := os.Args
 	db := config.InitDB()
@@ -53,7 +50,7 @@ func main() {
 	r := gin.Default()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{os.Getenv("ALLOWED_ORIGINS")},
+		AllowOrigins:     []string{cfg.AllowedOrigins},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -79,20 +76,15 @@ func main() {
 	scheduler.Start()
 	defer scheduler.Stop()
 
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		port = "8000"
-	}
-
 	srv := &http.Server{
-		Addr:         "0.0.0.0:8000",
+		Addr:         "0.0.0.0:" + cfg.ServerPort,
 		Handler:      r,
 		ReadTimeout:  10 * time.Minute,
 		WriteTimeout: 10 * time.Minute,
 	}
 
 	go func() {
-		log.Printf("Server running at http://0.0.0.0:%s\n", port)
+		log.Printf("Server running at http://0.0.0.0:%s\n", cfg.ServerPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
