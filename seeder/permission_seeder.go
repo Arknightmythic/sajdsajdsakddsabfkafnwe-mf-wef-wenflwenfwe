@@ -63,6 +63,7 @@ func permissionSeeder(db *sqlx.DB) {
 		"role-management:manager",
 		"role-management:master",
 		"helpdesk:read",
+		"helpdesk:toggle-helpdesk",
 	}
 
 	tx, err := db.Begin()

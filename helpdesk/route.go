@@ -45,6 +45,6 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 		helpdeskRoutes.POST("/solved/:id", handler.SolvedConversation)
 		helpdeskRoutes.GET("/switch", handler.GetSwitchStatus)
-		helpdeskRoutes.POST("/switch", handler.UpdateSwitchStatus)
+		helpdeskRoutes.POST("/switch", middleware.PermissionMiddleware(db, "helpdesk:toggle-helpdesk"), handler.UpdateSwitchStatus)
 	}
 }
