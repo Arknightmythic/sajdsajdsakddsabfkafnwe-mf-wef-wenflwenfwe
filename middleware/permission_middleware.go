@@ -17,14 +17,20 @@ func PermissionMiddleware(db *sqlx.DB, requiredPermission string) gin.HandlerFun
 			return
 		}
 
+		// PERBAIKAN QUERY:
+		// Kita melakukan JOIN ke tabel permissions.
+		// Logikanya: Cari user -> cek rolenya -> cek apakah di dalam array permission role tersebut
+		// ada ID yang memiliki nama sesuai 'requiredPermission'.
 		query := `
 			SELECT COUNT(*)
 			FROM users u
 			JOIN roles r ON u.role_id = r.id
-			WHERE u.id = $1 AND $2 = ANY(r.permissions)
+			JOIN permissions p ON p.id::text = ANY(r.permissions)
+			WHERE u.id = $1 AND p.name = $2
 		`
 
 		var count int
+		// $1 = userID, $2 = requiredPermission (contoh: "helpdesk:toggle-helpdesk")
 		err := db.Get(&count, query, userID, requiredPermission)
 		if err != nil {
 			util.ErrorResponse(c, http.StatusInternalServerError, "Failed to verify permissions")
@@ -33,6 +39,7 @@ func PermissionMiddleware(db *sqlx.DB, requiredPermission string) gin.HandlerFun
 		}
 
 		if count == 0 {
+			// Anda bisa menyesuaikan pesan error sesuai kebutuhan
 			util.ErrorResponse(c, http.StatusForbidden, "Anda tidak memiliki izin untuk fitur ini")
 			c.Abort()
 			return
