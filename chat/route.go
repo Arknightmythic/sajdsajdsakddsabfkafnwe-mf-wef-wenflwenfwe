@@ -71,7 +71,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		chatRoutes.DELETE(urConversationID, handler.DeleteConversation)
 
 		limitedRoutes := chatRoutes.Group("")
-		limitedRoutes.Use(middleware.ChatConcurrencyLimitMiddleware(100, externalClient))
+		limitedRoutes.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient))
 		{
 			limitedRoutes.POST("/ask", handler.Ask)
 		}
@@ -87,7 +87,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		apiKeyRoutes.POST("/feedback", handler.Feedback)
 
 		limitedMultichannel := apiKeyRoutes.Group("")
-		limitedMultichannel.Use(middleware.ChatConcurrencyLimitMiddleware(100, externalClient))
+		limitedMultichannel.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient))
 		{
 			limitedMultichannel.POST("/ask", handler.Ask)
 		}
