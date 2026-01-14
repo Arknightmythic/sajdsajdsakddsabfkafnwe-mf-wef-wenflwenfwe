@@ -10,6 +10,7 @@ import (
 	"dokuprime-be/grafana"
 	"dokuprime-be/guide"
 	"dokuprime-be/helpdesk"
+	"dokuprime-be/middleware"
 	"dokuprime-be/migrate"
 	"dokuprime-be/permission"
 	"dokuprime-be/role"
@@ -57,11 +58,13 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	r.Use(middleware.PlatformContextMiddleware())
+
 	user.RegisterRoutes(r, db, redisClient)
 	role.RegisterRoutes(r, db)
 	team.RegisterRoutes(r, db)
 	permission.RegisterRoutes(r, db)
-	grafana.RegisterRoutes(r, redisClient)
+	grafana.RegisterRoutes(r, redisClient, db)
 	guide.RegisterRoutes(r, db, redisClient)
 	chat.RegisterRoutes(r, db)
 	helpdesk.RegisterRoutes(r, db)

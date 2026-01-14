@@ -28,6 +28,10 @@ func NewConcurrencyLimiter(limit int) *ConcurrencyLimiter {
 	}
 }
 
+type ConversationChecker interface {
+	IsHelpdeskConversation(conversationID string) (bool, error)
+}
+
 func (cl *ConcurrencyLimiter) Acquire() bool {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -117,11 +121,20 @@ func GlobalConcurrencyLimitMiddleware() gin.HandlerFunc {
 	}
 }
 
-func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client) gin.HandlerFunc {
+func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, checker ConversationChecker) gin.HandlerFunc {
 	limiter := NewConcurrencyLimiter(limit)
 
 	return func(c *gin.Context) {
 		gl := getGlobalLimiter()
+		conversationID := c.Param("id")
+
+		if conversationID != "" && checker != nil {
+			isHelpdesk, err := checker.IsHelpdeskConversation(conversationID)
+			if err == nil && isHelpdesk {
+				c.Next()
+				return
+			}
+		}
 
 		if !limiter.Acquire() || !gl.Acquire() {
 			var req struct {

@@ -1,6 +1,7 @@
 package document
 
 import (
+	"dokuprime-be/audit"
 	"dokuprime-be/config"
 	"dokuprime-be/external"
 	"dokuprime-be/middleware"
@@ -11,8 +12,11 @@ import (
 )
 
 func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) *AsyncProcessor {
+	auditRepo := audit.NewAuditRepository(db)
+	auditService := audit.NewAuditService(auditRepo)
+
 	externalConfig := config.LoadExternalAPIConfig()
-	externalClient := external.NewClient(externalConfig)
+	externalClient := external.NewClient(externalConfig, auditService)
 
 	asyncProcessor := NewAsyncProcessor(externalClient, 5)
 
@@ -25,6 +29,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	documentRoutes := r.Group("/api/documents")
 
 	documentRoutes.Use(middleware.AuthMiddleware())
+	documentRoutes.Use(middleware.AuditMiddleware(auditService))
 	documentRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		documentRoutes.POST("/batch-upload", handler.BatchUploadDocument)
@@ -49,6 +54,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 
 	crawlerRoutes := r.Group("/api/documents/crawler")
 	crawlerRoutes.Use(middleware.APIKeyMiddleware())
+	crawlerRoutes.Use(middleware.AuditMiddleware(auditService))
 	crawlerRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		crawlerRoutes.POST("/upload", handler.CrawlerBatchUpload)

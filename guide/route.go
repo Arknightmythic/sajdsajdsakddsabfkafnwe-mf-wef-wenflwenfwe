@@ -1,6 +1,7 @@
 package guide
 
 import (
+	"dokuprime-be/audit"
 	"dokuprime-be/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -13,10 +14,14 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 	service := NewGuideService(repo, redisClient)
 	handler := NewGuideHandler(service, redisClient)
 
+	auditRepo := audit.NewAuditRepository(db)
+	auditService := audit.NewAuditService(auditRepo)
+
 	r.GET("/api/guides/view-file", handler.ViewFile)
 
 	guideGroup := r.Group("/api/guides")
 	guideGroup.Use(middleware.AuthMiddleware())
+	guideGroup.Use(middleware.AuditMiddleware(auditService))
 	guideGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		guideGroup.POST("", handler.UploadGuide)

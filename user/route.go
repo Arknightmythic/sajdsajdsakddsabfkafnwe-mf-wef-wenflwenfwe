@@ -1,6 +1,7 @@
 package user
 
 import (
+	"dokuprime-be/audit"
 	"dokuprime-be/middleware"
 	"dokuprime-be/permission"
 	"dokuprime-be/role"
@@ -20,7 +21,11 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 	service := NewUserService(repo, redisClient, serviceRole)
 	handler := NewUserHandler(service)
 
+	auditRepo := audit.NewAuditRepository(db)
+	auditService := audit.NewAuditService(auditRepo)
+
 	authGroup := r.Group("/auth")
+	authGroup.Use(middleware.AuditMiddleware(auditService))
 	{
 		authGroup.POST("/login", handler.Login)
 		authGroup.POST("/refresh", handler.RefreshToken)
@@ -31,6 +36,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 
 	userGroup := r.Group("/api/users")
 	userGroup.Use(middleware.AuthMiddleware())
+	userGroup.Use(middleware.AuditMiddleware(auditService))
 	userGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		userGroup.POST("/", handler.CreateUser)
