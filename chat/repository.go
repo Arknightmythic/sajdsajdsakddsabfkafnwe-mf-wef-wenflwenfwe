@@ -783,3 +783,13 @@ func (r *ChatRepository) GetChatHistoriesForDownload(startDate, endDate *time.Ti
 
 	return histories, nil
 }
+
+func (r *ChatRepository) IsHelpdeskConversation(conversationID string) (bool, error) {
+	var isHelpdesk bool
+	query := `SELECT is_helpdesk FROM conversations WHERE id = $1`
+	err := r.db.Get(&isHelpdesk, query, conversationID)
+	if err != nil {
+		return false, err
+	}
+	return isHelpdesk, nil
+}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"dokuprime-be/audit"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -38,6 +39,7 @@ type WebSocketClient struct {
 	messageHandlers map[string][]func(json.RawMessage)
 	connected       bool
 	reconnecting    bool
+	auditService    *audit.AuditService
 }
 
 func NewWebSocketClient(url, token string) *WebSocketClient {
@@ -48,6 +50,10 @@ func NewWebSocketClient(url, token string) *WebSocketClient {
 		connected:       false,
 		reconnecting:    false,
 	}
+}
+
+func (wsc *WebSocketClient) SetAuditService(auditService *audit.AuditService) {
+	wsc.auditService = auditService
 }
 
 func (wsc *WebSocketClient) Connect() error {
@@ -61,12 +67,14 @@ func (wsc *WebSocketClient) Connect() error {
 	urlWithToken := fmt.Sprintf("%s?token=%s", wsc.url, wsc.token)
 	conn, _, err := websocket.DefaultDialer.Dial(urlWithToken, nil)
 	if err != nil {
+		wsc.logWebSocketAction("CONNECT", "websocket", urlWithToken, "", err)
 		return fmt.Errorf("failed to connect to WebSocket: %w", err)
 	}
 
 	wsc.conn = conn
 	wsc.connected = true
 	log.Println("✅ Connected to WebSocket server")
+	wsc.logWebSocketAction("CONNECT", "websocket", urlWithToken, "Connected successfully", nil)
 
 	go wsc.readMessages()
 
@@ -86,7 +94,6 @@ func (wsc *WebSocketClient) readMessages() {
 			break
 		}
 
-		
 		wsc.processResponse(response)
 	}
 }
@@ -95,6 +102,7 @@ func (wsc *WebSocketClient) handleDisconnect() {
 	wsc.mu.Lock()
 	wsc.connected = false
 	wsc.mu.Unlock()
+	wsc.logWebSocketAction("DISCONNECT", "websocket", wsc.url, "Connection lost", nil)
 	go wsc.reconnect()
 }
 
@@ -102,6 +110,9 @@ func (wsc *WebSocketClient) processResponse(response WebSocketResponse) {
 	switch response.Event {
 	case "message":
 		wsc.handleMessageEvent(response.Channel, response.Data)
+
+		dataStr := string(response.Data)
+		wsc.logWebSocketAction("RECEIVE", response.Channel, response.Channel, dataStr, nil)
 	default:
 		if response.Status != "" {
 			log.Printf("WebSocket status: %s - %s", response.Status, response.Message)
@@ -160,6 +171,7 @@ func (wsc *WebSocketClient) reconnect() {
 	}
 
 	log.Println("❌ Failed to reconnect to WebSocket after 5 attempts")
+	wsc.logWebSocketAction("RECONNECT_FAILED", "websocket", wsc.url, "Failed after 5 attempts", nil)
 }
 
 func (wsc *WebSocketClient) Subscribe(channel, lastMessageID string) error {
@@ -176,7 +188,14 @@ func (wsc *WebSocketClient) Subscribe(channel, lastMessageID string) error {
 		LastMessageID: lastMessageID,
 	}
 
-	return wsc.conn.WriteJSON(msg)
+	err := wsc.conn.WriteJSON(msg)
+	if err != nil {
+		wsc.logWebSocketAction("SUBSCRIBE", channel, channel, "", err)
+	} else {
+		msgJSON, _ := json.Marshal(msg)
+		wsc.logWebSocketAction("SUBSCRIBE", channel, channel, string(msgJSON), nil)
+	}
+	return err
 }
 
 func (wsc *WebSocketClient) Publish(channel string, data interface{}) error {
@@ -194,7 +213,16 @@ func (wsc *WebSocketClient) Publish(channel string, data interface{}) error {
 		MessageID: uuid.New().String(),
 	}
 
-	return wsc.conn.WriteJSON(msg)
+	err := wsc.conn.WriteJSON(msg)
+
+	msgJSON, _ := json.Marshal(msg)
+	if err != nil {
+		wsc.logWebSocketAction("PUBLISH", channel, channel, string(msgJSON), err)
+	} else {
+		wsc.logWebSocketAction("PUBLISH", channel, channel, string(msgJSON), nil)
+	}
+
+	return err
 }
 
 func (wsc *WebSocketClient) OnMessage(channel string, handler func(json.RawMessage)) {
@@ -214,6 +242,7 @@ func (wsc *WebSocketClient) Close() error {
 
 	if wsc.conn != nil {
 		wsc.connected = false
+		wsc.logWebSocketAction("CLOSE", "websocket", wsc.url, "Connection closed", nil)
 		return wsc.conn.Close()
 	}
 	return nil
@@ -223,4 +252,52 @@ func (wsc *WebSocketClient) IsConnected() bool {
 	wsc.mu.Lock()
 	defer wsc.mu.Unlock()
 	return wsc.connected
+}
+
+func (wsc *WebSocketClient) logWebSocketAction(action, channel, path, message string, err error) {
+	if wsc.auditService == nil {
+		return
+	}
+
+	var errorMessage *string
+	if err != nil {
+		errMsg := err.Error()
+		errorMessage = &errMsg
+	}
+
+	var statusCode *int
+	if err == nil {
+		status := 200
+		statusCode = &status
+	} else {
+		status := 500
+		statusCode = &status
+	}
+
+	wsc.auditService.Log(audit.CreateAuditLogRequest{
+		UserID:       nil,
+		Action:       action,
+		Resource:     "websocket",
+		Method:       "WS",
+		Path:         path,
+		StatusCode:   statusCode,
+		RequestBody:  stringPtr(message),
+		ResponseBody: nil,
+		IPAddress:    "system",
+		UserAgent:    "websocket-client",
+		ErrorMessage: errorMessage,
+		Duration:     nil,
+	})
+}
+
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+
+	if len(s) > 5000 {
+		truncated := s[:5000] + "... (truncated)"
+		return &truncated
+	}
+	return &s
 }

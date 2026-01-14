@@ -32,6 +32,8 @@ func APIKeyMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		c.Set("platform_unique_id", "api_key_user")
+
 		c.Next()
 	}
 }

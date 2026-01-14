@@ -483,6 +483,42 @@ func RunMigrations(db *sqlx.DB) {
         END IF;
     END $$;
 
+    
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255), -- Changed to VARCHAR to support both user IDs and platform_unique_ids
+        user_type VARCHAR(50), -- 'authenticated', 'platform', 'system'
+        action VARCHAR(50) NOT NULL,
+        resource VARCHAR(100) NOT NULL,
+        method VARCHAR(10) NOT NULL,
+        path TEXT NOT NULL,
+        status_code INTEGER,
+        request_body TEXT,
+        response_body TEXT,
+        ip_address VARCHAR(45) NOT NULL,
+        user_agent TEXT,
+        error_message TEXT,
+        duration BIGINT, -- in milliseconds
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    -- Create indexes for better query performance
+    CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+    CREATE INDEX idx_audit_logs_user_type ON audit_logs(user_type);
+    CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+    CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+    CREATE INDEX idx_audit_logs_resource ON audit_logs(resource);
+    CREATE INDEX idx_audit_logs_status_code ON audit_logs(status_code);
+
+    -- Optional: Create composite indexes for common queries
+    CREATE INDEX idx_audit_logs_user_created ON audit_logs(user_id, created_at DESC);
+    CREATE INDEX idx_audit_logs_type_created ON audit_logs(user_type, created_at DESC);
+
+    -- Add comments for documentation
+    COMMENT ON COLUMN audit_logs.user_id IS 'User ID from token (as string) or platform_unique_id (e.g., instagram_123, whatsapp_456)';
+    COMMENT ON COLUMN audit_logs.user_type IS 'Type of user: authenticated (from token), platform (from external platform), or system (internal operations)';
+    COMMENT ON COLUMN audit_logs.duration IS 'Request duration in milliseconds';
+
     `
 
 	if _, err := db.Exec(query); err != nil {
