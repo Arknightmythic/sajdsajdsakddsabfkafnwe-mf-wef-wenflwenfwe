@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -26,6 +29,10 @@ func NewConcurrencyLimiter(limit int) *ConcurrencyLimiter {
 	return &ConcurrencyLimiter{
 		limit: limit,
 	}
+}
+
+type ConversationChecker interface {
+	IsHelpdeskConversation(conversationID string) (bool, error)
 }
 
 func (cl *ConcurrencyLimiter) Acquire() bool {
@@ -117,44 +124,63 @@ func GlobalConcurrencyLimitMiddleware() gin.HandlerFunc {
 	}
 }
 
-func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client) gin.HandlerFunc {
+func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, checker ConversationChecker) gin.HandlerFunc {
 	limiter := NewConcurrencyLimiter(limit)
 
 	return func(c *gin.Context) {
 		gl := getGlobalLimiter()
 
-		if !limiter.Acquire() || !gl.Acquire() {
-			var req struct {
-				Platform         string `json:"platform"`
-				PlatformUniqueID string `json:"platform_unique_id"`
-				Query            string `json:"query"`
-				ConversationID   string `json:"conversation_id"`
+		var req struct {
+			Platform         string `json:"platform"`
+			PlatformUniqueID string `json:"platform_unique_id"`
+			Query            string `json:"query"`
+			ConversationID   string `json:"conversation_id"`
+		}
+
+		bodyBytes, err := c.GetRawData()
+		if err == nil && len(bodyBytes) > 0 {
+
+			if err := json.Unmarshal(bodyBytes, &req); err == nil {
+
+				if req.ConversationID != "" && checker != nil {
+					log.Println(req.ConversationID, "Conversation ID")
+					isHelpdesk, err := checker.IsHelpdeskConversation(req.ConversationID)
+					log.Println("Is Helpdesk : ", isHelpdesk)
+					if err == nil && isHelpdesk {
+
+						c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+						c.Next()
+						return
+					}
+				}
 			}
 
-			if err := c.ShouldBindJSON(&req); err == nil {
-				if req.Platform != "web" && req.Platform != "" {
-					busyResponse := map[string]interface{}{
-						"user":               req.PlatformUniqueID,
-						"conversation_id":    req.ConversationID,
-						"query":              req.Query,
-						"rewritten_query":    "",
-						"category":           "",
-						"question_category":  []string{},
-						"answer":             answerValue,
-						"citations":          []interface{}{},
-						"is_helpdesk":        false,
-						"is_answered":        false,
-						"platform":           req.Platform,
-						"platform_unique_id": req.PlatformUniqueID,
-						"question_id":        0,
-						"answer_id":          0,
-					}
+			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
 
-					if err := externalClient.SendMessageToAPI(busyResponse); err != nil {
-						log.Printf("Failed to send busy notification: %v", err)
-					} else {
-						log.Printf("✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
-					}
+		if !limiter.Acquire() || !gl.Acquire() {
+			if req.Platform != "web" && req.Platform != "" {
+				busyResponse := map[string]interface{}{
+					"user":               req.PlatformUniqueID,
+					"conversation_id":    req.ConversationID,
+					"query":              req.Query,
+					"rewritten_query":    "",
+					"category":           "",
+					"question_category":  []string{},
+					"answer":             answerValue,
+					"citations":          []interface{}{},
+					"is_helpdesk":        false,
+					"is_answered":        false,
+					"platform":           req.Platform,
+					"platform_unique_id": req.PlatformUniqueID,
+					"question_id":        0,
+					"answer_id":          0,
+				}
+
+				if err := externalClient.SendMessageToAPI(busyResponse); err != nil {
+					log.Printf("Failed to send busy notification: %v", err)
+				} else {
+					log.Printf("✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
 				}
 			}
 

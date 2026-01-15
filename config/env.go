@@ -139,7 +139,7 @@ func LoadConfig() *Config {
 		WebSocketURL:       getEnv("WEBSOCKET_URL", "ws://localhost:8080"),
 		WebSocketSecretKey: getEnv("WEBSOCKET_SECRET_KEY", "bkpm-jaya-jaya-jaya"),
 
-		HelpdeskQueuePeriodMinutes: time.Duration(getEnvAsInt("HELPDESK_QUEUE_PERIOD_MINUTES", 2)) * time.Minute,
+		HelpdeskQueuePeriodMinutes: time.Duration(getEnvAsInt("HELPDESK_QUEUE_PERIOD_MINUTES", 15)) * time.Minute,
 
 		LimitConcurrentRequests:     getEnvAsInt("LIMIT_CONCURRENT_REQUESTS", 150),
 		LimitConcurrentChatRequests: getEnvAsInt("LIMIT_CONCURRENT_CHAT_REQUESTS", 2),

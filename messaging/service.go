@@ -115,16 +115,14 @@ type HelpdeskMessageResponse struct {
 }
 
 func (s *MessageService) HandleHelpdeskMessage(sessionID uuid.UUID, message string, userType string, platform string, platformUniqueID *string, startTimestamp string) error {
-	
+
 	chatHistoryID, err := s.saveHelpdeskMessageToDB(sessionID, message, userType, startTimestamp)
 	if err != nil {
 		return err
 	}
 
-	
 	publishData := s.preparePublishData(sessionID, message, userType, platform, platformUniqueID, chatHistoryID)
 
-	
 	if platform == "web" {
 		s.handleWebHelpdesk(sessionID, publishData)
 	} else {
@@ -220,11 +218,15 @@ func (s *MessageService) handleExternalHelpdesk(sessionID uuid.UUID, message, us
 
 func (s *MessageService) SubscribeToHelpdeskChannels(sessionID string) error {
 	userChannel := sessionID
+	agentChannel := sessionID + Agent
+
+	s.wsClient.OffMessage(userChannel)
+	s.wsClient.OffMessage(agentChannel)
+
 	if err := s.wsClient.Subscribe(userChannel, "$"); err != nil {
 		return fmt.Errorf("failed to subscribe to user channel: %w", err)
 	}
 
-	agentChannel := sessionID + Agent
 	if err := s.wsClient.Subscribe(agentChannel, "$"); err != nil {
 		return fmt.Errorf("failed to subscribe to agent channel: %w", err)
 	}

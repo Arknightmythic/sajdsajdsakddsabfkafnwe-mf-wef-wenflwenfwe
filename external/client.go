@@ -2,6 +2,7 @@ package external
 
 import (
 	"bytes"
+	"dokuprime-be/audit"
 	"dokuprime-be/config"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -21,16 +23,18 @@ const (
 )
 
 type Client struct {
-	baseURL     string
-	messagesURL string
-	httpClient  *http.Client
+	baseURL      string
+	messagesURL  string
+	httpClient   *http.Client
+	auditService *audit.AuditService
 }
 
-func NewClient(cfg *config.ExternalAPIConfig) *Client {
+func NewClient(cfg *config.ExternalAPIConfig, auditService *audit.AuditService) *Client {
 	return &Client{
-		baseURL:     cfg.BaseURL,
-		messagesURL: cfg.MessagesAPIURL,
-		httpClient:  &http.Client{},
+		baseURL:      cfg.BaseURL,
+		messagesURL:  cfg.MessagesAPIURL,
+		httpClient:   &http.Client{},
+		auditService: auditService,
 	}
 }
 
@@ -255,6 +259,7 @@ func (c *Client) DeleteDocument(req DeleteRequest) error {
 }
 
 func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
+	startTime := time.Now()
 	url := c.baseURL + "/api/chat/"
 
 	jsonData, err := json.Marshal(req)
@@ -271,18 +276,23 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	httpReq.Header.Set(isXAPI, config.AppConfig.XAPIKey)
 
 	resp, err := c.httpClient.Do(httpReq)
+	duration := time.Since(startTime).Milliseconds()
+
 	if err != nil {
+		c.logExternalAPICall("SendChatMessage", "POST", url, string(jsonData), "", nil, err, duration)
 		return nil, fmt.Errorf(isFailedToSend, err)
 	}
+
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.logExternalAPICall("SendChatMessage", "POST", url, string(jsonData), "", &resp.StatusCode, err, duration)
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode == http.StatusGatewayTimeout || resp.StatusCode == http.StatusServiceUnavailable {
-
+		c.logExternalAPICall("SendChatMessage", "POST", url, string(jsonData), string(bodyBytes), &resp.StatusCode, nil, duration)
 		var jsonResp map[string]interface{}
 		if json.Unmarshal(bodyBytes, &jsonResp) == nil {
 			jsonBytes, _ := json.Marshal(jsonResp)
@@ -292,14 +302,17 @@ func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		c.logExternalAPICall("SendChatMessage", "POST", url, string(jsonData), string(bodyBytes), &resp.StatusCode, nil, duration)
 		return nil, fmt.Errorf("external API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var chatResp ChatResponse
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
+		c.logExternalAPICall("SendChatMessage", "POST", url, string(jsonData), string(bodyBytes), &resp.StatusCode, err, duration)
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
+	c.logExternalAPICall("SendChatMessage", "POST", url, string(jsonData), string(bodyBytes), &resp.StatusCode, nil, duration)
 	return &chatResp, nil
 }
 
@@ -310,6 +323,7 @@ type MessageAPIRequest struct {
 }
 
 func (c *Client) SendMessageToAPI(data interface{}) error {
+	startTime := time.Now()
 	url := c.messagesURL + "/api/send/reply"
 
 	requestBody := MessageAPIRequest{
@@ -332,15 +346,92 @@ func (c *Client) SendMessageToAPI(data interface{}) error {
 	httpReq.Header.Set(isXAPI, config.AppConfig.MessagesAPIKey)
 
 	resp, err := c.httpClient.Do(httpReq)
+	duration := time.Since(startTime).Milliseconds()
+
 	if err != nil {
+		c.logExternalAPICall("SendMessageToAPI", "POST", url, string(jsonData), "", nil, err, duration)
 		return fmt.Errorf(isFailedToSend, err)
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		c.logExternalAPICall("SendMessageToAPI", "POST", url, string(jsonData), string(bodyBytes), &resp.StatusCode, nil, duration)
 		return fmt.Errorf("messages API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
+	c.logExternalAPICall("SendMessageToAPI", "POST", url, string(jsonData), string(bodyBytes), &resp.StatusCode, nil, duration)
 	return nil
+}
+
+func (c *Client) logExternalAPICall(action, method, path, reqBody, respBody string, statusCode *int, err error, duration int64) {
+	if c.auditService == nil {
+		return
+	}
+
+	var errorMessage *string
+	if err != nil {
+		errMsg := err.Error()
+		errorMessage = &errMsg
+	}
+
+	var userID *string
+	var userType *string
+	if reqBody != "" {
+		platformUniqueID := extractPlatformUniqueID(reqBody)
+		if platformUniqueID != "" {
+			userID = &platformUniqueID
+			uType := "external_api"
+			userType = &uType
+		}
+	}
+
+	c.auditService.Log(audit.CreateAuditLogRequest{
+		UserID:       userID,
+		UserType:     userType,
+		Action:       action,
+		Resource:     "external_api",
+		Method:       method,
+		Path:         path,
+		StatusCode:   statusCode,
+		RequestBody:  stringPtr(reqBody),
+		ResponseBody: stringPtr(respBody),
+		IPAddress:    "system",
+		UserAgent:    "dokuprime-backend",
+		ErrorMessage: errorMessage,
+		Duration:     &duration,
+	})
+}
+
+func extractPlatformUniqueID(jsonBody string) string {
+	var data map[string]interface{}
+
+	if err := json.Unmarshal([]byte(jsonBody), &data); err != nil {
+		return ""
+	}
+
+	if platformID, ok := data["platform_unique_id"].(string); ok && platformID != "" {
+		return platformID
+	}
+
+	if nestedData, ok := data["data"].(map[string]interface{}); ok {
+		if platformID, ok := nestedData["platform_unique_id"].(string); ok && platformID != "" {
+			return platformID
+		}
+	}
+
+	return ""
+}
+
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+
+	if len(s) > 5000 {
+		truncated := s[:5000] + "... (truncated)"
+		return &truncated
+	}
+	return &s
 }

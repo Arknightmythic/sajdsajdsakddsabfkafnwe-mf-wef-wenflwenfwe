@@ -1,6 +1,7 @@
 package helpdesk
 
 import (
+	"dokuprime-be/audit"
 	"dokuprime-be/config"
 	"dokuprime-be/external"
 	"dokuprime-be/messaging"
@@ -14,8 +15,11 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	repo := NewHelpdeskRepository(db)
 	service := NewHelpdeskService(repo)
 
+	auditRepo := audit.NewAuditRepository(db)
+	auditService := audit.NewAuditService(auditRepo)
+
 	externalAPIConfig := config.LoadExternalAPIConfig()
-	externalClient := external.NewClient(externalAPIConfig)
+	externalClient := external.NewClient(externalAPIConfig, auditService)
 
 	wsURL := config.AppConfig.WebSocketURL
 	if wsURL == "" {
@@ -33,6 +37,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	helpdeskRoutes := r.Group("/api/helpdesk")
 	helpdeskRoutes.Use(middleware.AuthMiddleware())
+	helpdeskRoutes.Use(middleware.AuditMiddleware(auditService))
 	helpdeskRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		helpdeskRoutes.POST("", handler.CreateHelpdesk)

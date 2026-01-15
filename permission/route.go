@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"dokuprime-be/audit"
 	"dokuprime-be/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -12,9 +13,13 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	service := NewPermissionService(repo)
 	handler := NewPermissionHandler(service)
 
+	auditRepo := audit.NewAuditRepository(db)
+	auditService := audit.NewAuditService(auditRepo)
+
 	permissionRoutes := r.Group("/api/permissions")
 
 	permissionRoutes.Use(middleware.AuthMiddleware())
+	permissionRoutes.Use(middleware.AuditMiddleware(auditService))
 	permissionRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		permissionRoutes.POST("", handler.CreatePermission)

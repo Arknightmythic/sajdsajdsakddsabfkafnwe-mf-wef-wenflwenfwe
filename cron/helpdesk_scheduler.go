@@ -21,11 +21,13 @@ func NewHelpdeskScheduler(db *sqlx.DB) *HelpdeskScheduler {
 func (h *HelpdeskScheduler) UpdateQueuedToPending() {
 	period := config.AppConfig.HelpdeskQueuePeriodMinutes
 
-	threshold := time.Now().UTC().Add(-time.Duration(period) * time.Minute)
+	threshold := time.Now().UTC().Add(-period)
+	log.Println(threshold, "is the threshold time for updating helpdesk queue status")
+
 	query := `
 		UPDATE bkpm.helpdesk
 		SET status = 'pending'
-		WHERE (status = 'Queue' OR status = 'queue') -- Tambahkan kurung di sini
+		WHERE (status = 'Queue' OR status = 'queue')
 		AND created_at <= $1
 	`
 

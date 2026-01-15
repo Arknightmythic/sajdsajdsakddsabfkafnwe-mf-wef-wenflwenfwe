@@ -33,7 +33,7 @@ func NewAsyncProcessor(externalClient *external.Client, workerCount int) *AsyncP
 
 	processor := &AsyncProcessor{
 		externalClient: externalClient,
-		jobQueue:       make(chan ExtractionJob, 100),
+		jobQueue:       make(chan ExtractionJob, 500),
 		workerCount:    workerCount,
 		ctx:            ctx,
 		cancel:         cancel,

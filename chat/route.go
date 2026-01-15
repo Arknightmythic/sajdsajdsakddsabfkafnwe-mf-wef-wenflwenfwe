@@ -1,12 +1,12 @@
 package chat
 
 import (
+	"dokuprime-be/audit"
 	"dokuprime-be/config"
 	"dokuprime-be/external"
 	"dokuprime-be/helpdesk"
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
-	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -21,8 +21,11 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	repo := NewChatRepository(db)
 	service := NewChatService(repo)
 
+	auditRepo := audit.NewAuditRepository(db)
+	auditService := audit.NewAuditService(auditRepo)
+
 	externalAPIConfig := config.LoadExternalAPIConfig()
-	externalClient := external.NewClient(externalAPIConfig)
+	externalClient := external.NewClient(externalAPIConfig, auditService)
 
 	helpdeskService := helpdesk.NewHelpdeskService(helpdesk.NewHelpdeskRepository(db))
 
@@ -47,11 +50,9 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		defaulChattLimit = limitChat
 	}
 
-	log.Println(defaulChattLimit, "is the limit for concurrent chat requests")
-	log.Println(config.AppConfig.LimitConcurrentChatRequests, "is the config value for concurrent chat requests")
-
 	chatRoutes := r.Group("/api/chat")
 	chatRoutes.Use(middleware.AuthMiddleware())
+	chatRoutes.Use(middleware.AuditMiddleware(auditService))
 	chatRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		chatRoutes.POST("/history", handler.CreateChatHistory)
@@ -71,7 +72,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 		chatRoutes.DELETE(urConversationID, handler.DeleteConversation)
 
 		limitedRoutes := chatRoutes.Group("")
-		limitedRoutes.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient))
+		limitedRoutes.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient, repo))
 		{
 			limitedRoutes.POST("/ask", handler.Ask)
 		}
@@ -82,12 +83,13 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	apiKeyRoutes := r.Group("/api/chat/multichannel")
 	apiKeyRoutes.Use(middleware.APIKeyMiddleware())
+	apiKeyRoutes.Use(middleware.AuditMiddleware(auditService))
 	apiKeyRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
 	{
 		apiKeyRoutes.POST("/feedback", handler.Feedback)
 
 		limitedMultichannel := apiKeyRoutes.Group("")
-		limitedMultichannel.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient))
+		limitedMultichannel.Use(middleware.ChatConcurrencyLimitMiddleware(defaulChattLimit, externalClient, repo))
 		{
 			limitedMultichannel.POST("/ask", handler.Ask)
 		}
