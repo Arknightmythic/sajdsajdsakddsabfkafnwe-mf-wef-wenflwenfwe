@@ -376,7 +376,6 @@ func (c *Client) logExternalAPICall(action, method, path, reqBody, respBody stri
 		errorMessage = &errMsg
 	}
 
-	// Extract platform_unique_id from request body JSON
 	var userID *string
 	var userType *string
 	if reqBody != "" {
@@ -405,7 +404,6 @@ func (c *Client) logExternalAPICall(action, method, path, reqBody, respBody stri
 	})
 }
 
-// extractPlatformUniqueID extracts platform_unique_id from JSON request body
 func extractPlatformUniqueID(jsonBody string) string {
 	var data map[string]interface{}
 
@@ -413,12 +411,10 @@ func extractPlatformUniqueID(jsonBody string) string {
 		return ""
 	}
 
-	// Try to get platform_unique_id directly
 	if platformID, ok := data["platform_unique_id"].(string); ok && platformID != "" {
 		return platformID
 	}
 
-	// If the request body has nested "data" field (like in MessageAPIRequest)
 	if nestedData, ok := data["data"].(map[string]interface{}); ok {
 		if platformID, ok := nestedData["platform_unique_id"].(string); ok && platformID != "" {
 			return platformID

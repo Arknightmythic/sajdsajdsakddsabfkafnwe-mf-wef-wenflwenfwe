@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"dokuprime-be/audit"
 	"encoding/json"
 	"fmt"
@@ -40,15 +41,22 @@ type WebSocketClient struct {
 	connected       bool
 	reconnecting    bool
 	auditService    *audit.AuditService
+	ctx             context.Context
+	cancel          context.CancelFunc
+	readDone        chan struct{}
 }
 
 func NewWebSocketClient(url, token string) *WebSocketClient {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &WebSocketClient{
 		url:             url,
 		token:           token,
 		messageHandlers: make(map[string][]func(json.RawMessage)),
 		connected:       false,
 		reconnecting:    false,
+		ctx:             ctx,
+		cancel:          cancel,
+		readDone:        make(chan struct{}),
 	}
 }
 
@@ -82,9 +90,18 @@ func (wsc *WebSocketClient) Connect() error {
 }
 
 func (wsc *WebSocketClient) readMessages() {
-	defer wsc.handleDisconnect()
+	defer func() {
+		close(wsc.readDone)
+		wsc.handleDisconnect()
+	}()
 
 	for {
+		select {
+		case <-wsc.ctx.Done():
+			return
+		default:
+		}
+
 		var response WebSocketResponse
 		err := wsc.conn.ReadJSON(&response)
 		if err != nil {
@@ -148,6 +165,12 @@ func (wsc *WebSocketClient) reconnect() {
 	}()
 
 	for i := 0; i < 5; i++ {
+		select {
+		case <-wsc.ctx.Done():
+			return
+		default:
+		}
+
 		log.Printf("Attempting to reconnect to WebSocket (attempt %d/5)...", i+1)
 		time.Sleep(time.Second * time.Duration(i+1))
 
@@ -162,6 +185,11 @@ func (wsc *WebSocketClient) reconnect() {
 			wsc.mu.Unlock()
 
 			for _, channel := range channels {
+				select {
+				case <-wsc.ctx.Done():
+					return
+				default:
+				}
 				if err := wsc.Subscribe(channel, "$"); err != nil {
 					log.Printf("Failed to resubscribe to channel %s: %v", channel, err)
 				}
@@ -236,15 +264,43 @@ func (wsc *WebSocketClient) OnMessage(channel string, handler func(json.RawMessa
 	wsc.messageHandlers[channel] = append(wsc.messageHandlers[channel], handler)
 }
 
-func (wsc *WebSocketClient) Close() error {
+func (wsc *WebSocketClient) OffMessage(channel string) {
 	wsc.mu.Lock()
 	defer wsc.mu.Unlock()
 
+	if _, exists := wsc.messageHandlers[channel]; exists {
+		wsc.messageHandlers[channel] = nil
+		delete(wsc.messageHandlers, channel)
+	}
+}
+
+func (wsc *WebSocketClient) ClearHandlers() {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+
+	wsc.messageHandlers = make(map[string][]func(json.RawMessage))
+}
+
+func (wsc *WebSocketClient) Close() error {
+
+	wsc.cancel()
+
+	wsc.mu.Lock()
 	if wsc.conn != nil {
 		wsc.connected = false
 		wsc.logWebSocketAction("CLOSE", "websocket", wsc.url, "Connection closed", nil)
-		return wsc.conn.Close()
+		wsc.conn.Close()
 	}
+
+	wsc.messageHandlers = make(map[string][]func(json.RawMessage))
+	wsc.mu.Unlock()
+
+	select {
+	case <-wsc.readDone:
+	case <-time.After(5 * time.Second):
+		log.Println("Warning: readMessages goroutine did not exit within timeout")
+	}
+
 	return nil
 }
 
