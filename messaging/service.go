@@ -242,3 +242,24 @@ func (s *MessageService) SubscribeToHelpdeskChannels(sessionID string) error {
 	log.Printf("✅ Subscribed to helpdesk channels for session: %s", sessionID)
 	return nil
 }
+
+func (s *MessageService) UnsubscribeHelpdeskChannels(sessionID string) error {
+	userChannel := sessionID
+	agentChannel := sessionID + Agent
+
+	// Unsubscribe channel User
+	if err := s.wsClient.Unsubscribe(userChannel); err != nil {
+		log.Printf("⚠️ Failed to unsubscribe user channel %s: %v", userChannel, err)
+	} else {
+		log.Printf("✅ Unsubscribed from user channel: %s", userChannel)
+	}
+
+	// Unsubscribe channel Agent
+	if err := s.wsClient.Unsubscribe(agentChannel); err != nil {
+		log.Printf("⚠️ Failed to unsubscribe agent channel %s: %v", agentChannel, err)
+	} else {
+		log.Printf("✅ Unsubscribed from agent channel: %s", agentChannel)
+	}
+
+	return nil
+}

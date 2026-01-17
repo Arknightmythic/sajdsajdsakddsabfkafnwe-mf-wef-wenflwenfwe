@@ -286,5 +286,9 @@ func (h *HelpdeskHandler) SolvedConversation(ctx *gin.Context) {
 		return
 	}
 
+	go func(sessionID string) {
+		_ = h.messageService.UnsubscribeHelpdeskChannels(sessionID)
+	}(id.String())
+
 	util.SuccessResponse(ctx, "Conversation successfully solved", nil)
 }
