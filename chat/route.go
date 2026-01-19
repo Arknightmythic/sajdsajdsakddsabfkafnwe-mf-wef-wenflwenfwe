@@ -7,6 +7,7 @@ import (
 	"dokuprime-be/helpdesk"
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
+	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -49,6 +50,8 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	if limitChat != 0 && limitChat > 0 {
 		defaulChattLimit = limitChat
 	}
+
+	log.Println("LIMIT CHAT IS : ", limitChat)
 
 	chatRoutes := r.Group("/api/chat")
 	chatRoutes.Use(middleware.AuthMiddleware())
