@@ -429,6 +429,7 @@ func (r *ChatRepository) fetchRawHistories(sessionID *uuid.UUID, filter ChatHist
 	}
 
 	conditions = append(conditions, "c.is_helpdesk = false")
+	conditions = append(conditions, "ch.is_answered is not null")
 
 	where := ""
 	if len(conditions) > 0 {
