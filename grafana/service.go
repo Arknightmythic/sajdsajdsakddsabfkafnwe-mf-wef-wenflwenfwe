@@ -32,7 +32,7 @@ func (s *GrafanaService) GenerateEmbedURL(req *GenerateEmbedRequest) (string, er
 	case "yearly":
 		baseURL = config.AppConfig.GrafanaEmbedYearlyURL
 	case "custom":
-		baseURL = config.AppConfig.GrafanaEmbedDailyURL
+		baseURL = config.AppConfig.GrafanaEmbedCustomURL
 		if req.StartDate == "" || req.EndDate == "" {
 			return "", fmt.Errorf("start_date and end_date are required for custom category")
 		}
