@@ -357,3 +357,31 @@ func stringPtr(s string) *string {
 	}
 	return &s
 }
+
+func (wsc *WebSocketClient) Unsubscribe(channel string) error {
+	wsc.mu.Lock()
+	defer wsc.mu.Unlock()
+
+	if !wsc.connected {
+		if _, exists := wsc.messageHandlers[channel]; exists {
+			delete(wsc.messageHandlers, channel)
+		}
+	}
+	if _, exists := wsc.messageHandlers[channel]; exists {
+		delete(wsc.messageHandlers, channel)
+	}
+	msg := WebSocketMessage{
+		Action:  "unsubscribe",
+		Channel: channel,
+	}
+	msgJSON, _ := json.Marshal(msg)
+	
+	err := wsc.conn.WriteJSON(msg)
+	if err != nil {
+		wsc.logWebSocketAction("UNSUBSCRIBE", channel, channel, string(msgJSON), err)
+		return fmt.Errorf("failed to send unsubscribe frame: %w", err)
+	}
+
+	wsc.logWebSocketAction("UNSUBSCRIBE", channel, channel, string(msgJSON), nil)
+	return nil
+}
