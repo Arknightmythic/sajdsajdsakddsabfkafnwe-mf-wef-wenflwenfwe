@@ -362,14 +362,17 @@ func (wsc *WebSocketClient) Unsubscribe(channel string) error {
 	wsc.mu.Lock()
 	defer wsc.mu.Unlock()
 
-	if !wsc.connected {
-		if _, exists := wsc.messageHandlers[channel]; exists {
-			delete(wsc.messageHandlers, channel)
-		}
-	}
+	// 1. Cleanup local handlers regardless of connection state
 	if _, exists := wsc.messageHandlers[channel]; exists {
 		delete(wsc.messageHandlers, channel)
 	}
+
+	// 2. Check if connected. If not, we are done (handlers removed), return early.
+	if !wsc.connected || wsc.conn == nil {
+		return nil
+	}
+
+	// 3. Proceed to send unsubscribe message only if connected
 	msg := WebSocketMessage{
 		Action:  "unsubscribe",
 		Channel: channel,
