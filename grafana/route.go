@@ -3,6 +3,7 @@ package grafana
 import (
 	"dokuprime-be/audit"
 	"dokuprime-be/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -22,6 +23,7 @@ func RegisterRoutes(r *gin.Engine, redisClient *redis.Client, db *sqlx.DB) {
 	grafanaGroup.Use(middleware.AuthMiddleware())
 	grafanaGroup.Use(middleware.AuditMiddleware(auditService))
 	grafanaGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	grafanaGroup.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		grafanaGroup.POST("/generate-embed-url", handler.GenerateEmbedURL)
 	}

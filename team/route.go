@@ -4,6 +4,7 @@ import (
 	"dokuprime-be/audit"
 	"dokuprime-be/middleware"
 	"dokuprime-be/permission"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -23,6 +24,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	teamRoutes.Use(middleware.AuthMiddleware())
 	teamRoutes.Use(middleware.AuditMiddleware(auditService))
 	teamRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	teamRoutes.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		teamRoutes.POST("", handler.CreateTeam)
 		teamRoutes.GET("", handler.GetAll)
