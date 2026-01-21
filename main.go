@@ -80,10 +80,8 @@ func main() {
 	defer scheduler.Stop()
 
 	srv := &http.Server{
-		Addr:         "0.0.0.0:" + cfg.ServerPort,
-		Handler:      r,
-		ReadTimeout:  10 * time.Minute,
-		WriteTimeout: 10 * time.Minute,
+		Addr:    "0.0.0.0:" + cfg.ServerPort,
+		Handler: r,
 	}
 
 	go func() {

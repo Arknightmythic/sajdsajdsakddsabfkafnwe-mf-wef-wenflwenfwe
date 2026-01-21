@@ -1,6 +1,8 @@
 package role
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 
@@ -25,6 +27,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	roleGroup.Use(middleware.AuthMiddleware())
 	roleGroup.Use(middleware.AuditMiddleware(auditService))
 	roleGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	roleGroup.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		roleGroup.POST("", handler.Create)
 		roleGroup.GET("", handler.GetAll)

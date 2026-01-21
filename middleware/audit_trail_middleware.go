@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,11 +15,30 @@ import (
 type responseWriter struct {
 	gin.ResponseWriter
 	body *bytes.Buffer
+	mu   sync.Mutex
 }
 
 func (w *responseWriter) Write(b []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	// Capture response body for audit
 	w.body.Write(b)
-	return w.ResponseWriter.Write(b)
+
+	// Write to actual response
+	n, err := w.ResponseWriter.Write(b)
+	return n, err
+}
+
+func (w *responseWriter) WriteString(s string) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	// Capture response body for audit
+	w.body.WriteString(s)
+
+	// Write to actual response
+	return w.ResponseWriter.WriteString(s)
 }
 
 func AuditMiddleware(auditService *audit.AuditService) gin.HandlerFunc {
@@ -73,7 +93,10 @@ func AuditMiddleware(auditService *audit.AuditService) gin.HandlerFunc {
 			}
 		}
 
+		// Thread-safe access to response body
+		writer.mu.Lock()
 		responseBody := writer.body.String()
+		writer.mu.Unlock()
 
 		if len(requestBody) > 5000 {
 			requestBody = requestBody[:5000] + "... (truncated)"

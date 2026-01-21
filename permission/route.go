@@ -3,6 +3,7 @@ package permission
 import (
 	"dokuprime-be/audit"
 	"dokuprime-be/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -21,6 +22,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	permissionRoutes.Use(middleware.AuthMiddleware())
 	permissionRoutes.Use(middleware.AuditMiddleware(auditService))
 	permissionRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	permissionRoutes.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		permissionRoutes.POST("", handler.CreatePermission)
 		permissionRoutes.GET("", handler.GetPermissions)

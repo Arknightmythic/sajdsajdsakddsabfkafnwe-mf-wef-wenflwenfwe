@@ -5,6 +5,7 @@ import (
 	"dokuprime-be/config"
 	"dokuprime-be/external"
 	"dokuprime-be/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -31,6 +32,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	documentRoutes.Use(middleware.AuthMiddleware())
 	documentRoutes.Use(middleware.AuditMiddleware(auditService))
 	documentRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	documentRoutes.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		documentRoutes.POST("/batch-upload", handler.BatchUploadDocument)
 		documentRoutes.GET("/batch-status", handler.GetBatchUploadStatus)
@@ -56,6 +58,7 @@ func RegisterRoutesWithProcessor(r *gin.Engine, db *sqlx.DB, redisClient *redis.
 	crawlerRoutes.Use(middleware.APIKeyMiddleware())
 	crawlerRoutes.Use(middleware.AuditMiddleware(auditService))
 	crawlerRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	crawlerRoutes.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		crawlerRoutes.POST("/upload", handler.CrawlerBatchUpload)
 	}

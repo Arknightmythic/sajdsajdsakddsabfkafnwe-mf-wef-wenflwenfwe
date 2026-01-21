@@ -1019,6 +1019,7 @@ func (h *ChatHandler) Close() error {
 }
 
 func (h *ChatHandler) DownloadChatHistory(ctx *gin.Context) {
+	log.Println("Masuk download history")
 
 	startDateStr := ctx.Query("start_date")
 	endDateStr := ctx.Query("end_date")

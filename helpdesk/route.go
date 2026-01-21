@@ -6,6 +6,7 @@ import (
 	"dokuprime-be/external"
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -39,6 +40,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 	helpdeskRoutes.Use(middleware.AuthMiddleware())
 	helpdeskRoutes.Use(middleware.AuditMiddleware(auditService))
 	helpdeskRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	helpdeskRoutes.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		helpdeskRoutes.POST("", handler.CreateHelpdesk)
 		helpdeskRoutes.GET("", handler.GetAll)
