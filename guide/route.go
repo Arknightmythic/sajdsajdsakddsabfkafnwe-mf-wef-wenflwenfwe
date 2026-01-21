@@ -3,6 +3,7 @@ package guide
 import (
 	"dokuprime-be/audit"
 	"dokuprime-be/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -23,6 +24,7 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB, redisClient *redis.Client) {
 	guideGroup.Use(middleware.AuthMiddleware())
 	guideGroup.Use(middleware.AuditMiddleware(auditService))
 	guideGroup.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	guideGroup.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		guideGroup.POST("", handler.UploadGuide)
 		guideGroup.GET("", handler.GetAll)

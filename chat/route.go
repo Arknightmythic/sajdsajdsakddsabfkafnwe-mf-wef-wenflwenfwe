@@ -8,6 +8,7 @@ import (
 	"dokuprime-be/messaging"
 	"dokuprime-be/middleware"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -53,14 +54,23 @@ func RegisterRoutes(r *gin.Engine, db *sqlx.DB) {
 
 	log.Println("LIMIT CHAT IS : ", limitChat)
 
+	downloadRoute := r.Group("/api/chat/history")
+	downloadRoute.Use(middleware.NoTimeoutMiddleware())
+	downloadRoute.Use(middleware.AuthMiddleware())
+	downloadRoute.Use(middleware.AuditMiddleware(auditService))
+	downloadRoute.Use(middleware.NoTimeoutMiddleware())
+	{
+		downloadRoute.GET("/download", handler.DownloadChatHistory)
+	}
+
 	chatRoutes := r.Group("/api/chat")
 	chatRoutes.Use(middleware.AuthMiddleware())
 	chatRoutes.Use(middleware.AuditMiddleware(auditService))
 	chatRoutes.Use(middleware.GlobalConcurrencyLimitMiddleware())
+	chatRoutes.Use(middleware.TimeoutMiddleware(10 * time.Minute))
 	{
 		chatRoutes.POST("/history", handler.CreateChatHistory)
 		chatRoutes.GET("/history", handler.GetChatHistories)
-		chatRoutes.GET("/history/download", handler.DownloadChatHistory)
 		chatRoutes.GET("/history/session/:session_id", handler.GetChatHistoryBySessionID)
 		chatRoutes.GET(urlHistoryID, handler.GetChatHistoryByID)
 		chatRoutes.PUT(urlHistoryID, handler.UpdateChatHistory)
