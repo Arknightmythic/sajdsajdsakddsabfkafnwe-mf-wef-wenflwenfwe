@@ -196,50 +196,80 @@ func (h *GuideHandler) GenerateViewURL(c *gin.Context) {
 }
 
 
-func (h *GuideHandler) ViewFile(c *gin.Context) {
-	
-	token, err := c.Cookie(viewTokenCookieName)
-	if err != nil || token == "" {
-		util.ErrorResponse(c, http.StatusUnauthorized, "Missing access token (cookie required)")
-		return
-	}
+func (h *GuideHandler) ViewFile(ctx *gin.Context) {
+    // 1. Ambil Token dari Cookie (Sama seperti Document Module)
+    token, err := ctx.Cookie(viewTokenCookieName) // Pastikan nama constant sama, misal "guide_view_token"
+    if err != nil || token == "" {
+        util.ErrorResponse(ctx, http.StatusUnauthorized, "Missing access token (cookie required)")
+        return
+    }
 
-	
-	
-	domain := config.AppConfig.CookieDomain
-	path := config.AppConfig.CookiePath
-	if path == "" {
-		path = "/api/guides/view-file"
-	}
-	c.SetCookie(viewTokenCookieName, "", -1, path, domain, false, true)
+    // 2. Hapus Cookie agar token hanya sekali pakai (One-time use) - Tiru Document Module
+    domain := config.AppConfig.CookieDomain
+    path := "/api/guides/view-file" // Pastikan path ini SAMA PERSIS dengan saat SetCookie di GenerateViewURL
+    
+    // Hapus cookie segera
+    ctx.SetCookie(viewTokenCookieName, "", -1, path, domain, false, true)
 
-	
-	key := "view_guide_token:" + token
-	ctxRedis := context.Background()
+    // 3. Validasi ke Redis
+    key := "view_guide_token:" + token // Sesuaikan prefix key redis kamu
+    ctxRedis := context.Background()
 
-	filename, err := h.redis.Get(ctxRedis, key).Result()
-	if err == redis.Nil {
-		util.ErrorResponse(c, http.StatusUnauthorized, "Invalid or expired token")
-		return
-	}
-	if err != nil {
-		util.ErrorResponse(c, http.StatusInternalServerError, "Failed to validate token")
-		return
-	}
+    filename, err := h.redis.Get(ctxRedis, key).Result()
+    if err == redis.Nil {
+        util.ErrorResponse(ctx, http.StatusUnauthorized, "Invalid or expired token")
+        return
+    }
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to validate token")
+        return
+    }
 
-	h.redis.Del(ctxRedis, key)
-	filePath := config.GetDocumentPath(filename)
+    // 4. Hapus Key di Redis (Supaya tidak bisa dipakai ulang)
+    h.redis.Del(ctxRedis, key)
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		util.ErrorResponse(c, http.StatusNotFound, "File not found on server")
-		return
-	}
+    // 5. Cek File Fisik
+    filePath := config.GetDocumentPath(filename)
+    if _, err := os.Stat(filePath); os.IsNotExist(err) {
+        util.ErrorResponse(ctx, http.StatusNotFound, "File not found on server")
+        return
+    }
 
-	c.Header("Content-Type", "application/pdf")
-	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
-	c.File(filePath)
+    file, err := os.Open(filePath)
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to open file")
+        return
+    }
+    defer file.Close()
+
+    fileInfo, err := file.Stat()
+    if err != nil {
+        util.ErrorResponse(ctx, http.StatusInternalServerError, "Failed to get file info")
+        return
+    }
+
+    // --- BAGIAN KUNCI (SOLUSI MASALAH CACHING) ---
+    // Tambahkan header ini agar browser TIDAK MENYIMPAN file di cache.
+    // Ini aman dari DAST karena tidak mengubah URL, hanya instruksi ke browser.
+    ctx.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+    ctx.Header("Pragma", "no-cache")
+    ctx.Header("Expires", "0")
+
+    // Set Content Type
+    ext := strings.ToLower(filepath.Ext(filename))
+    contentType := "application/octet-stream"
+    if ext == ".pdf" {
+        contentType = "application/pdf"
+    }
+
+    ctx.Header("Content-Description", "File View")
+    ctx.Header("Content-Type", contentType)
+    ctx.Header("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+    // Gunakan 'inline' agar terbuka di browser, bukan download
+    ctx.Header("Content-Disposition", fmt.Sprintf("inline; filename=%s", filename))
+
+    io.Copy(ctx.Writer, file)
 }
-
 
 
 func getEnvBool(key string, fallback bool) bool {
