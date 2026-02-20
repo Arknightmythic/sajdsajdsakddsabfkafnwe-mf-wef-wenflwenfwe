@@ -351,7 +351,7 @@ func (r *DocumentRepository) GetAllDocumentDetails(filter DocumentDetailFilter) 
 
 	args = append(args, limit, offset)
 
-	var details []DocumentDetail
+	details := make([]DocumentDetail, 0)
 	err := r.db.Select(&details, query, args...)
 	if err != nil {
 		return nil, err
@@ -455,6 +455,12 @@ func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter
 		argIndex++
 	}
 
+	if filter.RequestType != "" {
+		conditions = append(conditions, "dd.request_type = $"+fmt.Sprint(argIndex))
+		args = append(args, filter.RequestType)
+		argIndex++
+	}
+
 	if filter.DataType != "" {
 		conditions = append(conditions, "dd.data_type = $"+fmt.Sprint(argIndex))
 		args = append(args, filter.DataType)
@@ -480,12 +486,12 @@ func (r *DocumentRepository) GetTotalDocumentDetails(filter DocumentDetailFilter
 	}
 
 	if filter.StartDate != nil {
-		conditions = append(conditions, "dd.created_at >= $"+fmt.Sprint(argIndex))
+		conditions = append(conditions, "dd.requested_at >= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.StartDate)
 		argIndex++
 	}
 	if filter.EndDate != nil {
-		conditions = append(conditions, "dd.created_at <= $"+fmt.Sprint(argIndex))
+		conditions = append(conditions, "dd.requested_at <= $"+fmt.Sprint(argIndex))
 		args = append(args, *filter.EndDate)
 		argIndex++
 	}
