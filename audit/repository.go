@@ -69,3 +69,17 @@ func (r *AuditRepository) GetByUserID(userID string, limit, offset int) ([]Audit
 	err := r.db.Select(&logs, query, userID, limit, offset)
 	return logs, err
 }
+
+func (r *AuditRepository) ArchiveOldLogs() error {
+	query := `
+		WITH moved_rows AS (
+			DELETE FROM bkpm.audit_logs
+			WHERE created_at < date_trunc('month', current_date)
+			RETURNING *
+		)
+		INSERT INTO bkpm_archive.audit_logs
+		SELECT * FROM moved_rows;
+	`
+	_, err := r.db.Exec(query)
+	return err
+}

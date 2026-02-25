@@ -80,3 +80,14 @@ func copyInt64Ptr(i *int64) *int64 {
 	copy := *i
 	return &copy
 }
+
+func (s *AuditService) ArchiveOldLogs() error {
+	log.Println("[AuditService] Memulai proses arsip audit_logs bulan lalu...")
+	err := s.repo.ArchiveOldLogs()
+	if err != nil {
+		log.Printf("[AuditService] Gagal memindahkan log ke arsip: %v", err)
+		return err
+	}
+	log.Println("[AuditService] Berhasil menyelesaikan proses arsip audit_logs!")
+	return nil
+}

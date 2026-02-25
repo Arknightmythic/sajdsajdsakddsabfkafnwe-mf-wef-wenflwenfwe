@@ -76,6 +76,12 @@ func main() {
 	if err := helpdeskScheduler.RegisterJobs(scheduler); err != nil {
 		log.Fatalf("Failed to register helpdesk scheduler jobs: %v", err)
 	}
+
+	auditScheduler := cron.NewAuditScheduler(db)
+	if err := auditScheduler.RegisterJobs(scheduler); err != nil {
+		log.Fatalf("Failed to register audit scheduler jobs: %v", err)
+	}
+	
 	scheduler.Start()
 	defer scheduler.Stop()
 
