@@ -22,7 +22,7 @@ func NewAuditScheduler(db *sqlx.DB) *AuditScheduler {
 }
 
 func (s *AuditScheduler) RegisterJobs(scheduler *Scheduler) error {
-	err := scheduler.AddJob("0 15 17 * * *", func() {
+	err := scheduler.AddJob("0 0 1 * * *", func() {
 		_ = s.auditService.ArchiveOldLogs()
 	})
 	
