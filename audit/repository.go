@@ -2,6 +2,8 @@ package audit
 
 import (
 	"github.com/jmoiron/sqlx"
+	"log"
+	"time"
 )
 
 type AuditRepository struct {
@@ -71,15 +73,49 @@ func (r *AuditRepository) GetByUserID(userID string, limit, offset int) ([]Audit
 }
 
 func (r *AuditRepository) ArchiveOldLogs() error {
-	query := `
-		WITH moved_rows AS (
-			DELETE FROM bkpm.audit_logs
-			WHERE created_at < date_trunc('month', current_date)
-			RETURNING *
-		)
-		INSERT INTO bkpm_archive.audit_logs
-		SELECT * FROM moved_rows;
-	`
-	_, err := r.db.Exec(query)
-	return err
+	batchSize := 5000
+	totalMoved := 0
+
+	for {
+		query := `
+			WITH rows_to_move AS (
+				SELECT id FROM bkpm.audit_logs
+				WHERE created_at < CURRENT_DATE
+				ORDER BY created_at ASC
+				LIMIT $1
+			),
+			moved_rows AS (
+				DELETE FROM bkpm.audit_logs
+				WHERE id IN (SELECT id FROM rows_to_move)
+				RETURNING *
+			)
+			INSERT INTO bkpm_archive.audit_logs
+			SELECT * FROM moved_rows;
+		`
+		
+		result, err := r.db.Exec(query, batchSize)
+		if err != nil {
+			log.Printf("[AuditRepository] Error saat mengeksekusi batch: %v", err)
+			return err
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+
+		totalMoved += int(rowsAffected)
+
+		if rowsAffected == 0 {
+			break
+		}
+		
+		time.Sleep(1 * time.Second)
+	}
+
+	log.Printf("[AuditRepository] Selesai memindahkan %d baris data ke arsip.", totalMoved)
+	
+	_, _ = r.db.Exec("VACUUM ANALYZE bkpm.audit_logs;")
+	
+	return nil
 }
