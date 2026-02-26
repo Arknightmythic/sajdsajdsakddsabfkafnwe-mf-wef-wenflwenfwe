@@ -80,9 +80,19 @@ var (
 	globalLimiterOnce sync.Once
 )
 
+func InitGlobalLimiter() {
+	globalLimiterOnce.Do(func() {
+		limit := getConcurrencyLimit()
+		globalLimiter = NewConcurrencyLimiter(limit)
+		log.Printf("[ConcurrencyLimiter] Global limiter initialized with limit: %d", limit)
+	})
+}
+
 func getGlobalLimiter() *ConcurrencyLimiter {
 	globalLimiterOnce.Do(func() {
-		globalLimiter = NewConcurrencyLimiter(getConcurrencyLimit())
+		limit := getConcurrencyLimit()
+		globalLimiter = NewConcurrencyLimiter(limit)
+		log.Printf("[ConcurrencyLimiter] WARN: Global limiter initialized lazily with limit: %d. Call InitGlobalLimiter() after config load.", limit)
 	})
 	return globalLimiter
 }
@@ -97,14 +107,6 @@ func ConcurrencyLimitMiddleware(limit int) gin.HandlerFunc {
 			return
 		}
 		defer limiter.Release()
-
-		gl := getGlobalLimiter()
-		if !gl.Acquire() {
-			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
-			c.Abort()
-			return
-		}
-		defer gl.Release()
 
 		c.Next()
 	}
@@ -137,28 +139,46 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, 
 			ConversationID   string `json:"conversation_id"`
 		}
 
-		bodyBytes, err := c.GetRawData()
-		if err == nil && len(bodyBytes) > 0 {
+		bodyBytes, readErr := c.GetRawData()
+		if readErr != nil {
+			log.Printf("[ConcurrencyLimiter] WARN: Failed to read request body: %v", readErr)
+		} else {
+			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-			if err := json.Unmarshal(bodyBytes, &req); err == nil {
-
-				if req.ConversationID != "" && checker != nil {
-					log.Println(req.ConversationID, "Conversation ID")
-					isHelpdesk, err := checker.IsHelpdeskConversation(req.ConversationID)
-					log.Println("Is Helpdesk : ", isHelpdesk)
-					if err == nil && isHelpdesk {
-
-						c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-						c.Next()
-						return
-					}
+			if len(bodyBytes) > 0 {
+				if jsonErr := json.Unmarshal(bodyBytes, &req); jsonErr != nil {
+					log.Printf("[ConcurrencyLimiter] WARN: Failed to parse request body: %v", jsonErr)
 				}
 			}
-
-			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		if !limiter.Acquire() || !gl.Acquire() {
+		if req.ConversationID != "" && checker != nil {
+			log.Printf("[ConcurrencyLimiter] Checking conversation ID: %s", req.ConversationID)
+			isHelpdesk, err := checker.IsHelpdeskConversation(req.ConversationID)
+			log.Printf("[ConcurrencyLimiter] Is Helpdesk: %v", isHelpdesk)
+			if err == nil && isHelpdesk {
+				c.Next()
+				return
+			}
+			if err != nil {
+				log.Printf("[ConcurrencyLimiter] WARN: Failed to check helpdesk status: %v", err)
+			}
+		}
+
+		localAcquired := limiter.Acquire()
+		globalAcquired := false
+		if localAcquired {
+			globalAcquired = gl.Acquire()
+		}
+
+		if !localAcquired || !globalAcquired {
+			if localAcquired {
+				limiter.Release()
+			}
+			if globalAcquired {
+				gl.Release()
+			}
+
 			if req.Platform != "web" && req.Platform != "" {
 				busyResponse := map[string]interface{}{
 					"user":               req.PlatformUniqueID,
@@ -178,9 +198,9 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, 
 				}
 
 				if err := externalClient.SendMessageToAPI(busyResponse); err != nil {
-					log.Printf("Failed to send busy notification: %v", err)
+					log.Printf("[ConcurrencyLimiter] Failed to send busy notification: %v", err)
 				} else {
-					log.Printf("✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
+					log.Printf("[ConcurrencyLimiter] ✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
 				}
 			}
 

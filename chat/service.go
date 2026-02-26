@@ -183,3 +183,7 @@ func (s *ChatService) Feedback(answerID int, sessionID uuid.UUID, feedback bool)
 func (s *ChatService) GetChatHistoriesForDownload(startDate, endDate *time.Time, typeFilter string) ([]ChatHistory, error) {
 	return s.repo.GetChatHistoriesForDownload(startDate, endDate, typeFilter)
 }
+
+func (s *ChatService) SetHelpdeskIfNotAlready(conversationID uuid.UUID) (bool, error) {
+	return s.repo.SetHelpdeskIfNotAlready(conversationID)
+}
