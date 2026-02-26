@@ -708,28 +708,37 @@ func (h *ChatHandler) processAskResponseData(conversation *Conversation, resp *e
 	var responseQuestionCategory []string
 
 	if resp.IsHelpdesk {
-		responseAnswer = "Pesan Anda telah dikirim ke agen. Mohon tunggu balasan."
+
+		didSet, err := h.service.SetHelpdeskIfNotAlready(conversation.ID)
+		if err != nil {
+			log.Printf("Error setting helpdesk atomically for conversation %s: %v", conversation.ID, err)
+		}
+
+		if didSet {
+
+			log.Printf("✅ Helpdesk transition claimed for conversation: %s", conversation.ID)
+
+			existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)
+			if err != nil || existingHelpdesk == nil {
+				err = h.helpdeskService.Create(&helpdesk.Helpdesk{
+					SessionID:        resp.ConversationID,
+					Platform:         conversation.Platform,
+					PlatformUniqueID: &conversation.PlatformUniqueID,
+					Status:           "Queue",
+				})
+				if err != nil {
+					log.Printf("Error creating helpdesk: %v", err)
+				}
+			}
+			responseAnswer = "Pesan Anda telah dikirim ke agen. Mohon tunggu balasan."
+		} else {
+
+			log.Printf("⚠️ Helpdesk already set for conversation: %s, suppressing duplicate", conversation.ID)
+			responseAnswer = ""
+		}
+
 		responseCitations = external.FlexibleCitationArray{}
 		responseQuestionCategory = []string{}
-
-		existingHelpdesk, err := h.helpdeskService.GetBySessionID(resp.ConversationID)
-		if err != nil || existingHelpdesk == nil {
-			err = h.helpdeskService.Create(&helpdesk.Helpdesk{
-				SessionID:        resp.ConversationID,
-				Platform:         conversation.Platform,
-				PlatformUniqueID: &conversation.PlatformUniqueID,
-				Status:           "Queue",
-			})
-			if err != nil {
-				log.Printf("Error creating helpdesk: %v", err)
-			}
-		}
-		if !conversation.IsHelpdesk {
-			conversation.IsHelpdesk = true
-			if err := h.service.UpdateConversation(conversation); err != nil {
-				log.Printf("Failed to update conversation is_helpdesk status: %v", err)
-			}
-		}
 	} else {
 		responseAnswer = resp.Answer
 		responseCitations = resp.Citations
@@ -755,6 +764,11 @@ func (h *ChatHandler) processAskResponseData(conversation *Conversation, resp *e
 }
 
 func (h *ChatHandler) broadcastAskResponse(ctx *gin.Context, conversation *Conversation, responseAsk ResponseAsk) {
+	if responseAsk.IsHelpdesk && responseAsk.Answer == "" {
+		log.Printf("⏭️ Skipping broadcast for duplicate helpdesk on conversation: %s", conversation.ID)
+		return
+	}
+	
 	if conversation.Platform == "web" {
 		if h.wsClient.IsConnected() {
 			channelName := conversation.ID.String()
