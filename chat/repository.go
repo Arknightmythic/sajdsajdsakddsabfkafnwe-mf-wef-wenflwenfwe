@@ -794,21 +794,3 @@ func (r *ChatRepository) IsHelpdeskConversation(conversationID string) (bool, er
 	}
 	return isHelpdesk, nil
 }
-
-func (r *ChatRepository) SetHelpdeskIfNotAlready(conversationID uuid.UUID) (bool, error) {
-	result, err := r.db.Exec(`
-		UPDATE conversations
-		SET is_helpdesk = true
-		WHERE id = $1 AND is_helpdesk = false
-	`, conversationID)
-	if err != nil {
-		return false, err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-
-	return rowsAffected > 0, nil
-}
