@@ -91,3 +91,17 @@ func (s *AuditService) ArchiveOldLogs() error {
 	log.Println("[AuditService] Berhasil menyelesaikan proses arsip audit_logs!")
 	return nil
 }
+
+
+func (s *AuditService) CleanupArchiveLogs() error {
+	log.Println("[AuditService] Memulai proses pembersihan arsip audit_logs (Retensi 30 Hari)...")
+	
+	err := s.repo.CleanupArchiveLogs()
+	if err != nil {
+		log.Printf("[AuditService] Gagal membersihkan log arsip lama: %v", err)
+		return err
+	}
+	
+	log.Println("[AuditService] Berhasil menyelesaikan proses pembersihan arsip audit_logs!")
+	return nil
+}

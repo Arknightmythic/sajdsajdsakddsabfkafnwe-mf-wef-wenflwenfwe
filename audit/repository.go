@@ -119,3 +119,39 @@ func (r *AuditRepository) ArchiveOldLogs() error {
 	
 	return nil
 }
+
+func (r *AuditRepository) CleanupArchiveLogs() error {
+	batchSize := 5000
+	totalDeleted := 0
+	for {
+		query := `
+			DELETE FROM bkpm_archive.audit_logs
+			WHERE id IN (
+				SELECT id FROM bkpm_archive.audit_logs
+				WHERE created_at < CURRENT_DATE - INTERVAL '30 days'
+				LIMIT $1
+			)
+		`
+		result, err := r.db.Exec(query, batchSize)
+		if err != nil {
+			log.Printf("[AuditRepository] Error saat mengeksekusi batch hapus arsip: %v", err)
+			return err
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+
+		totalDeleted += int(rowsAffected)
+		
+		if rowsAffected == 0 {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	log.Printf("[AuditRepository] Selesai menghapus %d baris data arsip yang lebih dari 30 hari.", totalDeleted)
+	
+	return nil
+}
