@@ -71,7 +71,6 @@ type Config struct {
 	LimitConcurrentRequests     int
 	LimitConcurrentChatRequests int
 
-	CronArchiveSchedule string
 	CronCleanupSchedule string
 
 	DefaultTeam string
@@ -147,8 +146,7 @@ func LoadConfig() *Config {
 		LimitConcurrentRequests:     getEnvAsInt("LIMIT_CONCURRENT_REQUESTS", 150),
 		LimitConcurrentChatRequests: getEnvAsInt("LIMIT_CONCURRENT_CHAT_REQUESTS", 2),
 
-		CronArchiveSchedule: getEnv("CRON_AUDIT_ARCHIVE", "0 0 1 * * *"),
-		CronCleanupSchedule: getEnv("CRON_AUDIT_CLEANUP", "0 0 21 * * *"),
+		CronCleanupSchedule: getEnv("CRON_AUDIT_CLEANUP", "0 0 1 * * *"),
 
 		DefaultTeam: getEnv("DEFAULT_TEAM", "finance"),
 	}

@@ -2,8 +2,6 @@ package audit
 
 import (
 	"github.com/jmoiron/sqlx"
-	"log"
-	"time"
 )
 
 type AuditRepository struct {
@@ -70,88 +68,4 @@ func (r *AuditRepository) GetByUserID(userID string, limit, offset int) ([]Audit
 	`
 	err := r.db.Select(&logs, query, userID, limit, offset)
 	return logs, err
-}
-
-func (r *AuditRepository) ArchiveOldLogs() error {
-	batchSize := 5000
-	totalMoved := 0
-
-	for {
-		query := `
-			WITH rows_to_move AS (
-				SELECT id FROM bkpm.audit_logs
-				WHERE created_at < CURRENT_DATE
-				ORDER BY created_at ASC
-				LIMIT $1
-			),
-			moved_rows AS (
-				DELETE FROM bkpm.audit_logs
-				WHERE id IN (SELECT id FROM rows_to_move)
-				RETURNING *
-			)
-			INSERT INTO bkpm_archive.audit_logs
-			SELECT * FROM moved_rows;
-		`
-		
-		result, err := r.db.Exec(query, batchSize)
-		if err != nil {
-			log.Printf("[AuditRepository] Error saat mengeksekusi batch: %v", err)
-			return err
-		}
-
-		rowsAffected, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-
-		totalMoved += int(rowsAffected)
-
-		if rowsAffected == 0 {
-			break
-		}
-		
-		time.Sleep(1 * time.Second)
-	}
-
-	log.Printf("[AuditRepository] Selesai memindahkan %d baris data ke arsip.", totalMoved)
-	
-	_, _ = r.db.Exec("VACUUM ANALYZE bkpm.audit_logs;")
-	
-	return nil
-}
-
-func (r *AuditRepository) CleanupArchiveLogs() error {
-	batchSize := 5000
-	totalDeleted := 0
-	for {
-		query := `
-			DELETE FROM bkpm_archive.audit_logs
-			WHERE id IN (
-				SELECT id FROM bkpm_archive.audit_logs
-				WHERE created_at < CURRENT_DATE - INTERVAL '30 days'
-				LIMIT $1
-			)
-		`
-		result, err := r.db.Exec(query, batchSize)
-		if err != nil {
-			log.Printf("[AuditRepository] Error saat mengeksekusi batch hapus arsip: %v", err)
-			return err
-		}
-
-		rowsAffected, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-
-		totalDeleted += int(rowsAffected)
-		
-		if rowsAffected == 0 {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-
-	log.Printf("[AuditRepository] Selesai menghapus %d baris data arsip yang lebih dari 30 hari.", totalDeleted)
-	
-	return nil
 }
