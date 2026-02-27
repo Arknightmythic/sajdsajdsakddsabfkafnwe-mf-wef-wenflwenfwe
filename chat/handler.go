@@ -692,7 +692,7 @@ func (h *ChatHandler) ensureConversationFromResponse(reqPlatform, reqUniqueID st
 			StartTimestamp:   time.Now(),
 			Platform:         reqPlatform,
 			PlatformUniqueID: reqUniqueID,
-			IsHelpdesk:       resp.IsHelpdesk,
+			IsHelpdesk:       false,
 			Context:          nil,
 		}
 		if err := h.service.CreateConversation(conversation); err != nil {
