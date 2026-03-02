@@ -81,9 +81,19 @@ var (
 	globalLimiterOnce sync.Once
 )
 
+func InitGlobalLimiter() {
+	globalLimiterOnce.Do(func() {
+		limit := getConcurrencyLimit()
+		globalLimiter = NewConcurrencyLimiter(limit)
+		log.Printf("[ConcurrencyLimiter] Global limiter initialized with limit: %d", limit)
+	})
+}
+
 func getGlobalLimiter() *ConcurrencyLimiter {
 	globalLimiterOnce.Do(func() {
-		globalLimiter = NewConcurrencyLimiter(getConcurrencyLimit())
+		limit := getConcurrencyLimit()
+		globalLimiter = NewConcurrencyLimiter(limit)
+		log.Printf("[ConcurrencyLimiter] WARN: Global limiter initialized lazily with limit: %d. Call InitGlobalLimiter() after config load.", limit)
 	})
 	return globalLimiter
 }
@@ -98,14 +108,6 @@ func ConcurrencyLimitMiddleware(limit int) gin.HandlerFunc {
 			return
 		}
 		defer limiter.Release()
-
-		gl := getGlobalLimiter()
-		if !gl.Acquire() {
-			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
-			c.Abort()
-			return
-		}
-		defer gl.Release()
 
 		c.Next()
 	}
