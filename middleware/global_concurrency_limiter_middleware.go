@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"dokuprime-be/config"
 	"dokuprime-be/external"
@@ -139,61 +140,137 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, 
 
 		bodyBytes, err := c.GetRawData()
 		if err == nil && len(bodyBytes) > 0 {
-
 			if err := json.Unmarshal(bodyBytes, &req); err == nil {
-
 				if req.ConversationID != "" && checker != nil {
 					log.Println(req.ConversationID, "Conversation ID")
 					isHelpdesk, err := checker.IsHelpdeskConversation(req.ConversationID)
 					log.Println("Is Helpdesk : ", isHelpdesk)
 					if err == nil && isHelpdesk {
-
 						c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 						c.Next()
 						return
 					}
 				}
 			}
-
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		if !limiter.Acquire() || !gl.Acquire() {
-			if req.Platform != "web" && req.Platform != "" {
-				busyResponse := map[string]interface{}{
-					"user":               req.PlatformUniqueID,
-					"conversation_id":    req.ConversationID,
-					"query":              req.Query,
-					"rewritten_query":    "",
-					"category":           "",
-					"question_category":  []string{},
-					"answer":             answerValue,
-					"citations":          []interface{}{},
-					"is_helpdesk":        false,
-					"is_answered":        false,
-					"platform":           req.Platform,
-					"platform_unique_id": req.PlatformUniqueID,
-					"question_id":        0,
-					"answer_id":          0,
-				}
-
-				if err := externalClient.SendMessageToAPI(busyResponse); err != nil {
-					log.Printf("Failed to send busy notification: %v", err)
-				} else {
-					log.Printf("✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
-				}
-			}
-
-			util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
-			c.Abort()
+		localAcquired := limiter.Acquire()
+		if !localAcquired {
+			sendBusyResponse(c, externalClient, req)
 			return
 		}
 
-		defer func() {
+		globalAcquired := gl.Acquire()
+		if !globalAcquired {
 			limiter.Release()
-			gl.Release()
+			sendBusyResponse(c, externalClient, req)
+			return
+		}
+
+		released := make(chan struct{})
+
+		defer func() {
+			select {
+			case <-released:
+
+			default:
+				limiter.Release()
+				gl.Release()
+			}
+		}()
+
+		go func() {
+			timer := time.NewTimer(45 * time.Second)
+			defer timer.Stop()
+
+			select {
+			case <-timer.C:
+
+				select {
+				case <-released:
+
+					return
+				default:
+				}
+
+				log.Printf("⚠️ Request timeout after 45s for user %s on platform %s — force releasing slot", req.PlatformUniqueID, req.Platform)
+
+				limiter.Release()
+				gl.Release()
+				close(released)
+
+				c.Abort()
+
+				if req.Platform != "web" && req.Platform != "" {
+					busyResponse := buildBusyPayload(req)
+					if err := externalClient.SendMessageToAPI(busyResponse); err != nil {
+						log.Printf("Failed to send timeout notification: %v", err)
+					} else {
+						log.Printf("✅ Sent timeout notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
+					}
+				} else {
+
+					if !c.Writer.Written() {
+						util.ErrorResponse(c, http.StatusGatewayTimeout, answerValue)
+					}
+				}
+
+			case <-released:
+
+			}
 		}()
 
 		c.Next()
+
+		select {
+		case <-released:
+
+		default:
+			close(released)
+		}
 	}
+}
+
+func buildBusyPayload(req struct {
+	Platform         string `json:"platform"`
+	PlatformUniqueID string `json:"platform_unique_id"`
+	Query            string `json:"query"`
+	ConversationID   string `json:"conversation_id"`
+}) map[string]interface{} {
+	return map[string]interface{}{
+		"user":               req.PlatformUniqueID,
+		"conversation_id":    req.ConversationID,
+		"query":              req.Query,
+		"rewritten_query":    "",
+		"category":           "",
+		"question_category":  []string{},
+		"answer":             answerValue,
+		"citations":          []interface{}{},
+		"is_helpdesk":        false,
+		"is_answered":        false,
+		"platform":           req.Platform,
+		"platform_unique_id": req.PlatformUniqueID,
+		"question_id":        0,
+		"answer_id":          0,
+	}
+}
+
+func sendBusyResponse(c *gin.Context, externalClient *external.Client, req struct {
+	Platform         string `json:"platform"`
+	PlatformUniqueID string `json:"platform_unique_id"`
+	Query            string `json:"query"`
+	ConversationID   string `json:"conversation_id"`
+}) {
+	if req.Platform != "web" && req.Platform != "" {
+		payload := buildBusyPayload(req)
+		if err := externalClient.SendMessageToAPI(payload); err != nil {
+			log.Printf("Failed to send busy notification: %v", err)
+		} else {
+			log.Printf("✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
+		}
+	}
+
+	util.ErrorResponse(c, http.StatusTooManyRequests, answerValue)
+	c.Abort()
 }
