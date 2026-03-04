@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,7 @@ type ChatHandler struct {
 	wsClient        *config.WebSocketClient
 	helpdeskService helpdesk.HelpdeskService
 	messageService  messaging.MessageService
+	sessionMutex    sync.Map
 }
 
 func NewChatHandler(service *ChatService, externalClient *external.Client, wsURL, wsToken string, helpdeskService helpdesk.HelpdeskService, messageService messaging.MessageService) *ChatHandler {
@@ -413,6 +415,14 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 
 	h.ensureWebSocketConnection()
 
+	lockKey := req.ConversationID
+	if lockKey == "" {
+		lockKey = req.PlatformUniqueID + ":" + req.Platform
+	}
+	mu := h.getSessionLock(lockKey)
+	mu.Lock()
+	defer mu.Unlock()
+
 	conversation, err := h.resolveAskConversation(ctx, req.ConversationID)
 	if err != nil {
 		return
@@ -435,7 +445,6 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 	resp, err := h.externalClient.SendChatMessage(chatReq)
 	if err != nil {
 		log.Println("Line 307 - SendChatMessage error:", err)
-
 		h.handleSendChatError(ctx, err, req.PlatformUniqueID, req.Query, req.ConversationID, req.Platform, req.StartTimestamp, conversation)
 		return
 	}
@@ -445,6 +454,13 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		log.Println("Line 331", err)
 		util.ErrorResponse(ctx, http.StatusInternalServerError, "Error creating conversation")
 		return
+	}
+
+	if resp.IsHelpdesk && !finalConversation.IsHelpdesk {
+		finalConversation.IsHelpdesk = true
+		if err := h.service.UpdateConversation(finalConversation); err != nil {
+			log.Printf("Failed to set is_helpdesk on conversation: %v", err)
+		}
 	}
 
 	responseAsk := h.processAskResponseData(finalConversation, resp)
@@ -724,12 +740,7 @@ func (h *ChatHandler) processAskResponseData(conversation *Conversation, resp *e
 				log.Printf("Error creating helpdesk: %v", err)
 			}
 		}
-		if !conversation.IsHelpdesk {
-			conversation.IsHelpdesk = true
-			if err := h.service.UpdateConversation(conversation); err != nil {
-				log.Printf("Failed to update conversation is_helpdesk status: %v", err)
-			}
-		}
+
 	} else {
 		responseAnswer = resp.Answer
 		responseCitations = resp.Citations
@@ -789,6 +800,12 @@ func (h *ChatHandler) broadcastAskResponse(ctx *gin.Context, conversation *Conve
 
 		}
 	}
+}
+
+func (h *ChatHandler) getSessionLock(conversationID string) *sync.Mutex {
+	mu := &sync.Mutex{}
+	actual, _ := h.sessionMutex.LoadOrStore(conversationID, mu)
+	return actual.(*sync.Mutex)
 }
 
 func (h *ChatHandler) GetChatPairsBySessionID(ctx *gin.Context) {
