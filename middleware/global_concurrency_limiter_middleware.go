@@ -131,8 +131,6 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, 
 	limiter := NewConcurrencyLimiter(limit)
 
 	return func(c *gin.Context) {
-		gl := getGlobalLimiter()
-
 		var req struct {
 			Platform         string `json:"platform"`
 			PlatformUniqueID string `json:"platform_unique_id"`
@@ -142,11 +140,11 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, 
 
 		bodyBytes, err := c.GetRawData()
 		if err == nil && len(bodyBytes) > 0 {
-			if err := json.Unmarshal(bodyBytes, &req); err == nil {
+			if jsonErr := json.Unmarshal(bodyBytes, &req); jsonErr == nil {
+
 				if req.ConversationID != "" && checker != nil {
-					log.Println(req.ConversationID, "Conversation ID")
 					isHelpdesk, err := checker.IsHelpdeskConversation(req.ConversationID)
-					log.Println("Is Helpdesk : ", isHelpdesk)
+					log.Printf("[ChatLimiter] ConversationID=%s IsHelpdesk=%v err=%v", req.ConversationID, isHelpdesk, err)
 					if err == nil && isHelpdesk {
 						c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 						c.Next()
@@ -154,83 +152,56 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, 
 					}
 				}
 			}
+
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
-		localAcquired := limiter.Acquire()
-		if !localAcquired {
+		if !limiter.Acquire() {
+			log.Printf("[ChatLimiter] Limit reached (%d/%d) for user=%s platform=%s", limiter.GetCurrent(), limit, req.PlatformUniqueID, req.Platform)
 			sendBusyResponse(c, externalClient, req)
 			return
 		}
 
-		globalAcquired := gl.Acquire()
-		if !globalAcquired {
-			limiter.Release()
-			sendBusyResponse(c, externalClient, req)
-			return
-		}
-
-		released := make(chan struct{})
-
-		defer func() {
-			select {
-			case <-released:
-
-			default:
+		var releaseOnce sync.Once
+		release := func() {
+			releaseOnce.Do(func() {
 				limiter.Release()
-				gl.Release()
-			}
-		}()
+				log.Printf("[ChatLimiter] Slot released for user=%s platform=%s current=%d", req.PlatformUniqueID, req.Platform, limiter.GetCurrent())
+			})
+		}
 
+		done := make(chan struct{})
 		go func() {
 			timer := time.NewTimer(45 * time.Second)
 			defer timer.Stop()
 
 			select {
 			case <-timer.C:
-
-				select {
-				case <-released:
-
-					return
-				default:
-				}
-
-				log.Printf("⚠️ Request timeout after 45s for user %s on platform %s — force releasing slot", req.PlatformUniqueID, req.Platform)
-
-				limiter.Release()
-				gl.Release()
-				close(released)
-
-				c.Abort()
+				log.Printf("⚠️ [ChatLimiter] Timeout after 45s for user=%s platform=%s — force releasing slot", req.PlatformUniqueID, req.Platform)
+				release()
 
 				if req.Platform != "web" && req.Platform != "" {
-					busyResponse := buildBusyPayload(req)
-					if err := externalClient.SendMessageToAPI(busyResponse); err != nil {
-						log.Printf("Failed to send timeout notification: %v", err)
+					payload := buildBusyPayload(req)
+					if err := externalClient.SendMessageToAPI(payload); err != nil {
+						log.Printf("[ChatLimiter] Failed to send timeout notification: %v", err)
 					} else {
-						log.Printf("✅ Sent timeout notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
+						log.Printf("✅ [ChatLimiter] Sent timeout notification to user=%s platform=%s", req.PlatformUniqueID, req.Platform)
 					}
 				} else {
-
 					if !c.Writer.Written() {
 						util.ErrorResponse(c, http.StatusGatewayTimeout, answerValue)
 					}
 				}
 
-			case <-released:
+			case <-done:
 
 			}
 		}()
 
 		c.Next()
 
-		select {
-		case <-released:
-
-		default:
-			close(released)
-		}
+		close(done)
+		release()
 	}
 }
 
@@ -267,9 +238,9 @@ func sendBusyResponse(c *gin.Context, externalClient *external.Client, req struc
 	if req.Platform != "web" && req.Platform != "" {
 		payload := buildBusyPayload(req)
 		if err := externalClient.SendMessageToAPI(payload); err != nil {
-			log.Printf("Failed to send busy notification: %v", err)
+			log.Printf("[ChatLimiter] Failed to send busy notification: %v", err)
 		} else {
-			log.Printf("✅ Sent busy notification to user %s on platform %s", req.PlatformUniqueID, req.Platform)
+			log.Printf("✅ [ChatLimiter] Sent busy notification to user=%s platform=%s", req.PlatformUniqueID, req.Platform)
 		}
 	}
 
