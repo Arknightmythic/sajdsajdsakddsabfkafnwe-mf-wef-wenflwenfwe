@@ -3,6 +3,7 @@ package helpdesk
 import (
 	"dokuprime-be/messaging"
 	"dokuprime-be/util"
+	"errors"
 	"net/http"
 	"strconv"
 
