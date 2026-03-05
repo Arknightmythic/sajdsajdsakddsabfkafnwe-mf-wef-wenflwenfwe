@@ -2,6 +2,7 @@ package helpdesk
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
