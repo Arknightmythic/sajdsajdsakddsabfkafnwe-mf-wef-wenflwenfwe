@@ -155,8 +155,7 @@ func (r *HelpdeskRepository) Update(helpdesk *Helpdesk) error {
 
 func (r *HelpdeskRepository) UpdateStatus(id int, status string, userID any) error {
 	if status == "in_progress" && userID != nil {
-		// ATOMIC UPDATE: Cek kondisi status dan user_id di dalam query
-		query := `UPDATE helpdesk SET status = $1, user_id = $2 WHERE id = $3 AND status IN ('queue', 'pending', 'Queue') AND user_id IS NULL`
+		query := `UPDATE helpdesk SET status = $1, user_id = $2 WHERE id = $3 AND status IN ('queue', 'pending', 'Queue') AND (user_id IS NULL OR user_id = 0)`
 		res, err := r.db.Exec(query, status, userID, id)
 		if err != nil {
 			return err
@@ -167,7 +166,6 @@ func (r *HelpdeskRepository) UpdateStatus(id int, status string, userID any) err
 			return err
 		}
 		
-		// Jika tidak ada baris yang terpengaruh, berarti sudah diklaim agent lain
 		if rowsAffected == 0 {
 			return ErrAlreadyClaimed
 		}
