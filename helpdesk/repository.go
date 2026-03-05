@@ -9,6 +9,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+var ErrAlreadyClaimed = errors.New("chat sudah diambil oleh agent lain")
+
 type HelpdeskRepository struct {
 	db *sqlx.DB
 }
@@ -152,9 +154,23 @@ func (r *HelpdeskRepository) Update(helpdesk *Helpdesk) error {
 
 func (r *HelpdeskRepository) UpdateStatus(id int, status string, userID any) error {
 	if status == "in_progress" && userID != nil {
-		query := `UPDATE helpdesk SET status = $1, user_id = $2 WHERE id = $3`
-		_, err := r.db.Exec(query, status, userID, id)
-		return err
+		// ATOMIC UPDATE: Cek kondisi status dan user_id di dalam query
+		query := `UPDATE helpdesk SET status = $1, user_id = $2 WHERE id = $3 AND status IN ('queue', 'pending', 'Queue') AND user_id IS NULL`
+		res, err := r.db.Exec(query, status, userID, id)
+		if err != nil {
+			return err
+		}
+		
+		rowsAffected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		
+		// Jika tidak ada baris yang terpengaruh, berarti sudah diklaim agent lain
+		if rowsAffected == 0 {
+			return ErrAlreadyClaimed
+		}
+		return nil
 	} else {
 		query := `UPDATE helpdesk SET status = $1 WHERE id = $2`
 		_, err := r.db.Exec(query, status, id)

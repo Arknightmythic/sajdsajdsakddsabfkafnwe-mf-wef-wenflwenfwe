@@ -162,7 +162,13 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 			return
 		}
 
+		// Handle error Atomic Update
 		if err := h.service.UpdateStatus(id, status, userID); err != nil {
+			if err == ErrAlreadyClaimed {
+				// Berikan 409 Conflict agar Frontend tahu ini karena kalah cepat
+				util.ErrorResponse(ctx, http.StatusConflict, err.Error()) 
+				return
+			}
 			util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -172,6 +178,9 @@ func (h *HelpdeskHandler) UpdateHelpdesk(ctx *gin.Context) {
 			util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 			return
 		}
+
+		// TRIGGER WEBSOCKET GLOBAL: Agent B, C, D akan tahu agent A mengambil tiket ini
+		_ = h.messageService.PublishGlobalHelpdeskUpdate(helpdesk.SessionID, helpdesk.Status)
 
 		util.SuccessResponse(ctx, "Helpdesk status updated successfully", helpdesk)
 		return
@@ -285,6 +294,8 @@ func (h *HelpdeskHandler) SolvedConversation(ctx *gin.Context) {
 		util.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	_ = h.messageService.PublishGlobalHelpdeskUpdate(id.String(), "resolved")
 
 	go func(sessionID string) {
 		_ = h.messageService.UnsubscribeHelpdeskChannels(sessionID)

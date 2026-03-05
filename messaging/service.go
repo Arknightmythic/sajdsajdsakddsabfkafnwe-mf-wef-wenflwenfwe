@@ -263,3 +263,14 @@ func (s *MessageService) UnsubscribeHelpdeskChannels(sessionID string) error {
 
 	return nil
 }
+
+func (s *MessageService) PublishGlobalHelpdeskUpdate(sessionID string, status string) error {
+	data := map[string]interface{}{
+		"event":      "helpdesk_status_changed",
+		"session_id": sessionID,
+		"status":     status,
+	}
+	
+	// Publish ke channel global yang akan didengarkan oleh semua agent
+	return s.PublishToChannel("helpdesk-global", data)
+}
