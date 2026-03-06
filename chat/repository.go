@@ -16,6 +16,25 @@ type ChatRepository struct {
 	db *sqlx.DB
 }
 
+type dbChatPair struct {
+	QuestionID       int       `db:"question_id"`
+	QuestionContent  string    `db:"question_content"`
+	QuestionTime     time.Time `db:"question_time"`
+	AnswerID         int       `db:"answer_id"`
+	AnswerContent    string    `db:"answer_content"`
+	AnswerTime       time.Time `db:"answer_time"`
+	Category         *string   `db:"category"`
+	QuestionCategory *string   `db:"question_category"`
+	Feedback         *bool     `db:"feedback"`
+	IsCannotAnswer   *bool     `db:"is_cannot_answer"`
+	Revision         *string   `db:"revision"`
+	SessionID        uuid.UUID `db:"session_id"`
+	PlatformUniqueID string    `db:"platform_unique_id"`
+	IsValidated      *bool     `db:"is_validated"`
+	IsAnswered       *bool     `db:"is_answered"`
+	CreatedAt        time.Time `db:"created_at"`
+}
+
 type chatHistoryWithPlatform struct {
 	ChatHistory
 	PlatformUniqueID string `db:"platform_unique_id"`
@@ -385,15 +404,184 @@ func (r *ChatRepository) GetConversationByPlatformAndUser(platform, platformUniq
 }
 
 func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]ChatPair, int, error) {
+	args := []interface{}{}
+	argId := 1
 
-	histories, err := r.fetchRawHistories(sessionID, filter)
-	if err != nil {
+	sessionFilter := ""
+	if sessionID != nil {
+		sessionFilter = fmt.Sprintf(" AND ch.session_id = $%d", argId)
+		args = append(args, *sessionID)
+		argId++
+	}
+
+	timeFilterCTE := ""
+	if filter.StartDate != nil {
+		// Tarik mundur 1 hari sebagai safety net untuk query CTE
+		timeFilterCTE += fmt.Sprintf(" AND ch.created_at >= $%d - INTERVAL '1 day'", argId)
+		args = append(args, *filter.StartDate)
+		argId++
+	}
+	if filter.EndDate != nil {
+		timeFilterCTE += fmt.Sprintf(" AND ch.created_at <= $%d + INTERVAL '1 day'", argId)
+		args = append(args, *filter.EndDate)
+		argId++
+	}
+
+	// Gunakan Window Function (LEAD) untuk mengintip baris pesan selanjutnya
+	// agar terbentuk pasangan Tanya(Q) dan Jawab(A) langsung di level database.
+	baseQuery := fmt.Sprintf(`
+		WITH RankedChat AS (
+			SELECT 
+				ch.id as question_id,
+				COALESCE(ch.message->'data'->>'content', ch.message->>'content', '') as question_content,
+				ch.created_at as question_time,
+				ch.category,
+				ch.question_category,
+				ch.is_answered,
+				ch.session_id,
+				c.platform_unique_id,
+				
+				LEAD(ch.id) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC) as answer_id,
+				COALESCE(LEAD(ch.message) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC)->'data'->>'content', 
+						 LEAD(ch.message) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC)->>'content', '') as answer_content,
+				LEAD(ch.created_at) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC) as answer_time,
+				LEAD(ch.is_cannot_answer) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC) as is_cannot_answer,
+				LEAD(ch.feedback) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC) as feedback,
+				LEAD(ch.revision) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC) as revision,
+				LEAD(ch.is_validated) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC) as is_validated,
+				
+				COALESCE(ch.message->'data'->>'type', ch.message->>'type', ch.message->>'role', '') as q_role,
+				COALESCE(LEAD(ch.message) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC)->'data'->>'type',
+						 LEAD(ch.message) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC)->>'type',
+						 LEAD(ch.message) OVER (PARTITION BY ch.session_id ORDER BY ch.created_at ASC, ch.id ASC)->>'role', '') as a_role
+			FROM chat_history ch
+			JOIN conversations c ON ch.session_id = c.id
+			WHERE c.is_helpdesk = false %s %s
+		),
+		ValidPairs AS (
+			SELECT * FROM RankedChat
+			WHERE q_role IN ('human', 'user') 
+			  AND a_role IN ('ai', 'assistant')
+			  AND is_answered IS NOT NULL
+		),
+		FilteredPairs AS (
+			SELECT * FROM ValidPairs
+			WHERE 1=1
+	`, sessionFilter, timeFilterCTE)
+
+	filterQuery := ""
+
+	// Terapkan Filter Tambahan ke Data yang Sudah Dipasangkan
+	if filter.StartDate != nil {
+		filterQuery += fmt.Sprintf(" AND question_time >= $%d", argId)
+		args = append(args, *filter.StartDate)
+		argId++
+	}
+	if filter.EndDate != nil {
+		filterQuery += fmt.Sprintf(" AND question_time <= $%d", argId)
+		args = append(args, *filter.EndDate)
+		argId++
+	}
+
+	if filter.Search != "" {
+		searchPattern := "%" + filter.Search + "%"
+		filterQuery += fmt.Sprintf(` AND (
+			platform_unique_id ILIKE $%d OR 
+			session_id::text ILIKE $%d OR 
+			question_content ILIKE $%d OR 
+			answer_content ILIKE $%d
+		)`, argId, argId, argId, argId)
+		args = append(args, searchPattern)
+		argId++
+	}
+
+	if filter.IsValidated != nil {
+		reqVal := *filter.IsValidated
+		if reqVal == "null" {
+			filterQuery += " AND is_validated IS NULL"
+		} else if reqVal == "1" {
+			filterQuery += " AND is_validated = true"
+		} else if reqVal == "0" {
+			filterQuery += " AND is_validated = false"
+		}
+	}
+
+	if filter.IsAnswered != nil {
+		filterQuery += fmt.Sprintf(" AND is_answered = $%d", argId)
+		args = append(args, *filter.IsAnswered)
+		argId++
+	}
+
+	// Selesaikan CTE Bracket
+	baseQuery += filterQuery + "\n)"
+
+	// 1. Ambil Total Row (Untuk Pagination Metadata)
+	countQuery := baseQuery + " SELECT COUNT(*) FROM FilteredPairs"
+	var total int
+	if err := r.db.Get(&total, countQuery, args...); err != nil {
 		return nil, 0, err
 	}
 
-	pairs := r.buildChatPairs(histories, filter)
+	// 2. Ambil Data dengan Paginasi di DB Level
+	sortDir := "DESC"
+	if strings.ToUpper(filter.SortDirection) == "ASC" {
+		sortDir = "ASC"
+	}
 
-	return r.sortAndPaginatePairs(pairs, filter)
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	
+
+	dataQuery := baseQuery + fmt.Sprintf(`
+		SELECT 
+			question_id, question_content, question_time,
+			answer_id, answer_content, answer_time,
+			category, question_category, feedback,
+			is_cannot_answer, revision, session_id,
+			platform_unique_id, is_validated, is_answered,
+			question_time as created_at
+		FROM FilteredPairs
+		ORDER BY question_time %s
+		LIMIT $%d OFFSET $%d
+	`, sortDir, argId, argId+1)
+
+	args = append(args, limit, offset)
+
+	var dbResults []dbChatPair
+	if err := r.db.Select(&dbResults, dataQuery, args...); err != nil {
+		return nil, 0, err
+	}
+
+	// Konversi Array dbChatPair ke entity ChatPair persis seperti sebelumnya
+	pairs := make([]ChatPair, 0, len(dbResults))
+	for _, row := range dbResults {
+		pairs = append(pairs, ChatPair{
+			QuestionID:       row.QuestionID,
+			QuestionContent:  row.QuestionContent,
+			QuestionTime:     row.QuestionTime,
+			AnswerID:         row.AnswerID,
+			AnswerContent:    row.AnswerContent,
+			AnswerTime:       row.AnswerTime,
+			Category:         row.Category,
+			QuestionCategory: row.QuestionCategory,
+			Feedback:         row.Feedback,
+			IsCannotAnswer:   row.IsCannotAnswer,
+			Revision:         row.Revision,
+			SessionID:        row.SessionID,
+			PlatformUniqueID: row.PlatformUniqueID,
+			IsValidated:      row.IsValidated,
+			IsAnswered:       row.IsAnswered,
+			CreatedAt:        row.CreatedAt,
+		})
+	}
+
+	return pairs, total, nil
 }
 
 func (r *ChatRepository) fetchRawHistories(sessionID *uuid.UUID, filter ChatHistoryFilter) ([]chatHistoryWithPlatform, error) {
