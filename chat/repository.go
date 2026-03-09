@@ -416,19 +416,16 @@ func (r *ChatRepository) GetChatPairsBySessionID(sessionID *uuid.UUID, filter Ch
 
 	timeFilterCTE := ""
 	if filter.StartDate != nil {
-		// Tarik mundur 1 hari sebagai safety net untuk query CTE
-		timeFilterCTE += fmt.Sprintf(" AND ch.created_at >= $%d - INTERVAL '1 day'", argId)
+		timeFilterCTE += fmt.Sprintf(" AND ch.created_at >= $%d::timestamp - INTERVAL '1 day'", argId)
 		args = append(args, *filter.StartDate)
 		argId++
 	}
 	if filter.EndDate != nil {
-		timeFilterCTE += fmt.Sprintf(" AND ch.created_at <= $%d + INTERVAL '1 day'", argId)
+		timeFilterCTE += fmt.Sprintf(" AND ch.created_at <= $%d::timestamp + INTERVAL '1 day'", argId)
 		args = append(args, *filter.EndDate)
 		argId++
 	}
-
-	// Gunakan Window Function (LEAD) untuk mengintip baris pesan selanjutnya
-	// agar terbentuk pasangan Tanya(Q) dan Jawab(A) langsung di level database.
+	
 	baseQuery := fmt.Sprintf(`
 		WITH RankedChat AS (
 			SELECT 
