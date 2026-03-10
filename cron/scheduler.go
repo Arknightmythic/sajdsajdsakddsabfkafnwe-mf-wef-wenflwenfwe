@@ -13,7 +13,12 @@ type Scheduler struct {
 
 
 func NewScheduler() *Scheduler {
-	c := cron.New(cron.WithSeconds())
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		loc = time.Local
+	}
+	
+	c := cron.New(cron.WithSeconds(), cron.WithLocation(loc))
 	return &Scheduler{
 		cron: c,
 	}
