@@ -3,7 +3,7 @@ package cron
 import (
 	"log"
 	"time"
-
+	_ "time/tzdata"
 	"github.com/robfig/cron/v3"
 )
 
