@@ -84,6 +84,10 @@ func (wsc *WebSocketClient) Connect() error {
 	log.Println("✅ Connected to WebSocket server")
 	wsc.logWebSocketAction("CONNECT", "websocket", urlWithToken, "Connected successfully", nil)
 
+	wsc.mu.Lock()
+	wsc.readDone = make(chan struct{})
+	wsc.mu.Unlock()
+	
 	go wsc.readMessages()
 
 	return nil
