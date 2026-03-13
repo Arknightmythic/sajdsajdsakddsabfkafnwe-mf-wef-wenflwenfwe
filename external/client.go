@@ -2,6 +2,7 @@ package external
 
 import (
 	"bytes"
+	"context"
 	"dokuprime-be/audit"
 	"dokuprime-be/config"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	
 )
 
 const (
@@ -258,7 +260,7 @@ func (c *Client) DeleteDocument(req DeleteRequest) error {
 	return nil
 }
 
-func (c *Client) SendChatMessage(req ChatRequest) (*ChatResponse, error) {
+func (c *Client) SendChatMessage(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	startTime := time.Now()
 	url := c.baseURL + "/api/chat/"
 
