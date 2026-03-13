@@ -162,46 +162,20 @@ func ChatConcurrencyLimitMiddleware(limit int, externalClient *external.Client, 
 			return
 		}
 
-		var releaseOnce sync.Once
-		release := func() {
-			releaseOnce.Do(func() {
-				limiter.Release()
-				log.Printf("[ChatLimiter] Slot released for user=%s platform=%s current=%d", req.PlatformUniqueID, req.Platform, limiter.GetCurrent())
-			})
-		}
+		// 1. Buat konteks dengan batas waktu 45 detik
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 45*time.Second)
+		defer cancel()
+		
+		// 2. Timpa context request dengan context yang memiliki batas waktu
+		c.Request = c.Request.WithContext(ctx)
 
-		done := make(chan struct{})
-		go func() {
-			timer := time.NewTimer(45 * time.Second)
-			defer timer.Stop()
-
-			select {
-			case <-timer.C:
-				log.Printf("⚠️ [ChatLimiter] Timeout after 45s for user=%s platform=%s — force releasing slot", req.PlatformUniqueID, req.Platform)
-				release()
-
-				if req.Platform != "web" && req.Platform != "" {
-					payload := buildBusyPayload(req)
-					if err := externalClient.SendMessageToAPI(payload); err != nil {
-						log.Printf("[ChatLimiter] Failed to send timeout notification: %v", err)
-					} else {
-						log.Printf("✅ [ChatLimiter] Sent timeout notification to user=%s platform=%s", req.PlatformUniqueID, req.Platform)
-					}
-				} else {
-					if !c.Writer.Written() {
-						util.ErrorResponse(c, http.StatusGatewayTimeout, answerValue)
-					}
-				}
-
-			case <-done:
-
-			}
+		// 3. Pastikan limiter dilepas ketika semua proses selesai
+		defer func() {
+			limiter.Release()
+			log.Printf("[ChatLimiter] Slot released for user=%s platform=%s current=%d", req.PlatformUniqueID, req.Platform, limiter.GetCurrent())
 		}()
 
 		c.Next()
-
-		close(done)
-		release()
 	}
 }
 

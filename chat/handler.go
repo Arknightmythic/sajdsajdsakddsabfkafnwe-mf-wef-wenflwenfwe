@@ -442,7 +442,7 @@ func (h *ChatHandler) Ask(ctx *gin.Context) {
 		StartTimestamp:   req.StartTimestamp,
 	}
 
-	resp, err := h.externalClient.SendChatMessage(chatReq)
+	resp, err := h.externalClient.SendChatMessage(ctx.Request.Context(), chatReq)
 	if err != nil {
 		log.Println("Line 307 - SendChatMessage error:", err)
 		h.handleSendChatError(ctx, err, req.PlatformUniqueID, req.Query, req.ConversationID, req.Platform, req.StartTimestamp, conversation)
