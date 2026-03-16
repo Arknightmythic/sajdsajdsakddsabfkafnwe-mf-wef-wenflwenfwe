@@ -18,25 +18,40 @@ func NewAuditScheduler(db *sqlx.DB) *AuditScheduler {
 	}
 }
 
-// Logika pembersihan disatukan langsung di sini
 func (s *AuditScheduler) CleanupOldLogs() error {
-	log.Println("[AuditScheduler] Memulai proses retensi audit_logs (Menghapus data > 30 hari)...")
+	log.Println("[AuditScheduler] Memulai proses retensi audit_logs (Menghapus data > 15 hari)...")
 	
+	// 1. Ambil waktu saat ini dalam zona waktu Jakarta (WIB)
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		loc = time.Local
+	}
+	now := time.Now().In(loc)
+
+	// 2. Tentukan batas akhir (Cutoff): 15 Hari lalu, tepat di jam 23:59:59 WIB.
+	// Jika cron jalan 16 Maret, maka cutoff ini akan mengarah ke 1 Maret 23:59:59 WIB.
+	cutoffDateWIB := time.Date(now.Year(), now.Month(), now.Day()-15, 23, 59, 59, 999999999, loc)
+	
+	// 3. Konversi ke UTC karena data created_at di database menyimpannya dalam UTC
+	cutoffUTC := cutoffDateWIB.UTC() 
+
 	batchSize := 5000
 	totalDeleted := 0
 	batchCounter := 1
 
 	for {
+		// 4. Ubah query untuk menggunakan parameter $1 dan $2
 		query := `
 			DELETE FROM bkpm.audit_logs
 			WHERE id IN (
 				SELECT id FROM bkpm.audit_logs
-				WHERE created_at < CURRENT_DATE - INTERVAL '15 days'
-				LIMIT $1
+				WHERE created_at <= $1
+				LIMIT $2
 			)
 		`
 		
-		result, err := s.db.Exec(query, batchSize)
+		// 5. Eksekusi query dengan mengirim cutoffUTC secara eksplisit
+		result, err := s.db.Exec(query, cutoffUTC, batchSize)
 		if err != nil {
 			log.Printf("[AuditScheduler] Error saat mengeksekusi batch ke-%d: %v", batchCounter, err)
 			return err
