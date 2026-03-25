@@ -86,6 +86,12 @@ func (s *AuditScheduler) CleanupOldLogs() error {
 func (s *AuditScheduler) RegisterJobs(scheduler *Scheduler) error {
 	cleanupCron := config.AppConfig.CronCleanupSchedule
 
+	// Tambahkan kondisi ini: Jika di-set "OFF", "false", atau "-", lewati pendaftaran job
+	if cleanupCron == "OFF" || cleanupCron == "false" || cleanupCron == "-" {
+		log.Println("Audit retention cron job is DISABLED via config.")
+		return nil
+	}
+
 	if cleanupCron == "" {
 		cleanupCron = "0 0 1 * * *" // Setelan default jam 1 pagi
 	}
